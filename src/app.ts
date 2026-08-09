@@ -1,0 +1,125 @@
+import { serveStatic } from '@hono/node-server/serve-static';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadConfig, type RuntimeConfig } from './config.js';
+import { mountControlApi } from './control/control-api.js';
+import { ControlService } from './control/control-service.js';
+import { DataPlane } from './data-plane/data-plane.js';
+import { GatewayServerFactory } from './data-plane/gateway-server.js';
+import { CapabilityRegistry } from './data-plane/registry.js';
+import { createLogger, type Logger } from './observability/logger.js';
+import { ApiKeyHasher } from './security/api-keys.js';
+import { AuthService } from './security/auth-service.js';
+import { ControlSessionService } from './security/control-session.js';
+import { CursorCodec } from './security/cursor-codec.js';
+import { mountOAuthRoutes } from './security/oauth-routes.js';
+import { OAuthServer } from './security/oauth-server.js';
+import { SecretBox } from './security/secret-box.js';
+import { SqliteStore } from './storage/sqlite-store.js';
+import type { Store } from './storage/store.js';
+import { CredentialResolver } from './upstream/credential-resolver.js';
+import { UpstreamManager } from './upstream/manager.js';
+import { UpstreamOAuthService } from './upstream/oauth-service.js';
+import { mountUpstreamOAuthRoutes } from './upstream/oauth-routes.js';
+
+export interface ApplicationRuntime {
+  app: ReturnType<DataPlane['createApp']>;
+  config: RuntimeConfig;
+  logger: Logger;
+  store: Store;
+  upstreams: UpstreamManager;
+  dataPlane: DataPlane;
+  close(): Promise<void>;
+}
+
+export function createApplication(config: RuntimeConfig = loadConfig()): ApplicationRuntime {
+  const logger = createLogger(config.logLevel);
+  const secrets = new SecretBox(config.masterKey);
+  const store = new SqliteStore(config.databasePath, secrets);
+  const hasher = new ApiKeyHasher(config.masterKey);
+  const auth = new AuthService(store, hasher);
+  auth.ensureBootstrapControlKey(config.bootstrapControlKey);
+  const oauth = new OAuthServer(config.publicUrl, config.masterKey, auth);
+  const sessions = new ControlSessionService(config.masterKey);
+  const credentials = new CredentialResolver(store, config.publicUrl);
+  const upstreams = new UpstreamManager(store, credentials, logger);
+  const upstreamOAuth = new UpstreamOAuthService(store, config.publicUrl, upstreams, logger);
+  const registry = new CapabilityRegistry(store);
+  const cursors = new CursorCodec(config.masterKey);
+  const gatewayFactory = new GatewayServerFactory(registry, upstreams, cursors, config.masterKey);
+  const dataPlane = new DataPlane(gatewayFactory, registry, upstreams, auth, oauth, store, logger);
+  const app = dataPlane.createApp({
+    host: config.host,
+    allowedHosts: config.allowedHosts,
+    secure: config.publicUrl.protocol === 'https:',
+  });
+  const control = new ControlService(
+    store,
+    upstreams,
+    auth,
+    config.publicUrl,
+    (slug) => dataPlane.remove(slug),
+    () => dataPlane.registryChanged(),
+    upstreamOAuth,
+  );
+  mountControlApi(app, {
+    service: control,
+    auth,
+    sessions,
+    store,
+    publicUrl: config.publicUrl,
+    secureCookies: config.publicUrl.protocol === 'https:',
+    logger,
+  });
+  mountOAuthRoutes(app, {
+    oauth,
+    registry,
+    logger,
+  });
+  mountUpstreamOAuthRoutes(app, { oauth: upstreamOAuth, logger });
+
+  app.get('/healthz', (context) => context.json({ status: 'ok' }));
+  app.get('/readyz', (context) => {
+    if (control.diagnostics().ok) return context.json({ status: 'ready' });
+    return context.json({ status: 'degraded' }, 503);
+  });
+
+  const publicRoot = fileURLToPath(new URL('../public/', import.meta.url));
+  if (existsSync(publicRoot)) {
+    app.use('/*', serveStatic({ root: publicRoot }));
+    app.get('*', serveStatic({ path: join(publicRoot, 'index.html') }));
+  } else {
+    app.get('/', (context) =>
+      context.json({
+        name: 'MCP Home',
+        version: '0.1.0',
+        message: 'Build the Web console with npm run build:web.',
+      }),
+    );
+  }
+
+  for (const server of store.listServers().filter((item) => item.enabled)) {
+    if (store.getSnapshot(server.id)) continue;
+    void upstreams.refresh(server.id).catch((error) => {
+      logger.warn('Initial server refresh failed', {
+        serverId: server.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+
+  return {
+    app,
+    config,
+    logger,
+    store,
+    upstreams,
+    dataPlane,
+    async close() {
+      await dataPlane.close();
+      await upstreams.close();
+      store.close();
+    },
+  };
+}

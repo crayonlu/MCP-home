@@ -1,0 +1,21 @@
+services:
+  mcp-home:
+    build: .
+    init: true
+    restart: unless-stopped
+    ports:
+      - '3344:3344'
+    environment:
+      MCP_HOME_HOST: 0.0.0.0
+      MCP_HOME_PORT: 3344
+      MCP_HOME_PUBLIC_URL: ${MCP_HOME_PUBLIC_URL:-http://127.0.0.1:3344}
+      MCP_HOME_DATA_DIR: /data
+      MCP_HOME_MASTER_KEY: ${MCP_HOME_MASTER_KEY:?set MCP_HOME_MASTER_KEY}
+      MCP_HOME_BOOTSTRAP_CONTROL_KEY: ${MCP_HOME_BOOTSTRAP_CONTROL_KEY:?set MCP_HOME_BOOTSTRAP_CONTROL_KEY}
+      MCP_HOME_ALLOWED_HOSTS: ${MCP_HOME_ALLOWED_HOSTS:-127.0.0.1,localhost}
+      MCP_HOME_LOG_LEVEL: ${MCP_HOME_LOG_LEVEL:-info}
+    volumes:
+      - mcp-home-data:/data
+
+volumes:
+  mcp-home-data:

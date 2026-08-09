@@ -1,0 +1,5 @@
+.vibe/
+node_modules/
+dist/
+coverage/
+data/

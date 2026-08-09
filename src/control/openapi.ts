@@ -1,0 +1,248 @@
+interface OperationOptions {
+  body?: boolean;
+  parameters?: Record<string, unknown>[];
+  security?: Record<string, string[]>[];
+  success?: 200 | 201;
+  summary: string;
+}
+
+const jsonContent = {
+  'application/json': {
+    schema: { type: 'object', additionalProperties: true },
+  },
+};
+
+const idParameter = (name: string): Record<string, unknown> => ({
+  name,
+  in: 'path',
+  required: true,
+  schema: { type: 'string', format: 'uuid' },
+});
+
+const limitParameter: Record<string, unknown> = {
+  name: 'limit',
+  in: 'query',
+  schema: { type: 'integer', minimum: 1, maximum: 1000, default: 100 },
+};
+
+export function controlOpenApi(publicUrl: URL): Record<string, unknown> {
+  const paths: Record<string, Record<string, unknown>> = {};
+  const add = (
+    path: string,
+    method: 'get' | 'post' | 'patch' | 'delete',
+    operationId: string,
+    options: OperationOptions,
+  ): void => {
+    const operation: Record<string, unknown> = {
+      operationId,
+      summary: options.summary,
+      responses: {
+        [String(options.success ?? 200)]: {
+          description: 'Success',
+          content: jsonContent,
+        },
+        '400': { $ref: '#/components/responses/BadRequest' },
+        '401': { $ref: '#/components/responses/Unauthorized' },
+        '404': { $ref: '#/components/responses/NotFound' },
+        '409': { $ref: '#/components/responses/Conflict' },
+      },
+      security: options.security ?? [{ controlApiKey: [] }, { controlSession: [] }],
+      ...(options.parameters === undefined ? {} : { parameters: options.parameters }),
+      ...(options.body
+        ? {
+            requestBody: {
+              required: true,
+              content: jsonContent,
+            },
+          }
+        : {}),
+    };
+    paths[path] = { ...paths[path], [method]: operation };
+  };
+
+  add('/api/v1/session', 'post', 'createControlSession', {
+    summary: 'Exchange a Control API Key for a Web session',
+    security: [{ controlApiKey: [] }],
+  });
+  add('/api/v1/session', 'delete', 'deleteControlSession', {
+    summary: 'End the current Web session',
+    security: [],
+  });
+  add('/api/v1/openapi.json', 'get', 'getControlOpenApi', {
+    summary: 'Read this OpenAPI document',
+  });
+
+  add('/api/v1/servers', 'get', 'listServers', { summary: 'List MCP servers' });
+  add('/api/v1/servers', 'post', 'createServer', {
+    summary: 'Create an MCP server',
+    body: true,
+    success: 201,
+  });
+  add('/api/v1/servers/{server_id}', 'get', 'getServer', {
+    summary: 'Get an MCP server',
+    parameters: [idParameter('server_id')],
+  });
+  add('/api/v1/servers/{server_id}', 'patch', 'updateServer', {
+    summary: 'Update an MCP server',
+    parameters: [idParameter('server_id')],
+    body: true,
+  });
+  add('/api/v1/servers/{server_id}', 'delete', 'deleteServer', {
+    summary: 'Delete an MCP server',
+    parameters: [idParameter('server_id')],
+  });
+  for (const action of ['test', 'enable', 'disable', 'refresh', 'restart']) {
+    add(`/api/v1/servers/{server_id}/${action}`, 'post', `${action}Server`, {
+      summary: `${capitalize(action)} an MCP server`,
+      parameters: [idParameter('server_id')],
+    });
+  }
+  for (const view of ['capabilities', 'status', 'endpoint']) {
+    add(`/api/v1/servers/{server_id}/${view}`, 'get', `getServer${capitalize(view)}`, {
+      summary: `Read server ${view}`,
+      parameters: [idParameter('server_id')],
+    });
+  }
+  add('/api/v1/servers/{server_id}/logs', 'get', 'getServerLogs', {
+    summary: 'Read server event logs',
+    parameters: [idParameter('server_id'), limitParameter],
+  });
+
+  add('/api/v1/credentials', 'get', 'listCredentials', {
+    summary: 'List redacted upstream credentials',
+  });
+  add('/api/v1/credentials', 'post', 'createCredential', {
+    summary: 'Create an encrypted upstream credential',
+    body: true,
+    success: 201,
+  });
+  add('/api/v1/credentials/{credential_id}', 'get', 'getCredential', {
+    summary: 'Get a redacted upstream credential',
+    parameters: [idParameter('credential_id')],
+  });
+  add('/api/v1/credentials/{credential_id}', 'patch', 'updateCredential', {
+    summary: 'Update an upstream credential',
+    parameters: [idParameter('credential_id')],
+    body: true,
+  });
+  add('/api/v1/credentials/{credential_id}', 'delete', 'deleteCredential', {
+    summary: 'Delete an upstream credential',
+    parameters: [idParameter('credential_id')],
+  });
+  add('/api/v1/credentials/{credential_id}/test', 'post', 'testCredential', {
+    summary: 'Verify a credential against attached upstream servers',
+    parameters: [idParameter('credential_id')],
+  });
+  add('/api/v1/credentials/{credential_id}/authorize', 'post', 'authorizeCredential', {
+    summary: 'Start or resume upstream OAuth authorization',
+    parameters: [idParameter('credential_id')],
+    body: true,
+  });
+  add('/api/v1/credentials/{credential_id}/revoke', 'post', 'revokeCredential', {
+    summary: 'Revoke an upstream OAuth credential',
+    parameters: [idParameter('credential_id')],
+  });
+
+  for (const kind of ['control', 'access']) {
+    const segment = kind === 'control' ? 'control-keys' : 'access-keys';
+    const title = kind === 'control' ? 'Control API' : 'MCP Access';
+    add(`/api/v1/${segment}`, 'get', `list${capitalize(kind)}Keys`, {
+      summary: `List ${title} keys`,
+    });
+    add(`/api/v1/${segment}`, 'post', `create${capitalize(kind)}Key`, {
+      summary: `Create a ${title} key`,
+      body: true,
+      success: 201,
+    });
+    add(`/api/v1/${segment}/{key_id}`, 'delete', `revoke${capitalize(kind)}Key`, {
+      summary: `Revoke a ${title} key`,
+      parameters: [idParameter('key_id')],
+    });
+  }
+
+  add('/api/v1/overview', 'get', 'getOverview', { summary: 'Read the system overview' });
+  add('/api/v1/events', 'get', 'listEvents', {
+    summary: 'Read system events',
+    parameters: [limitParameter],
+  });
+  add('/api/v1/diagnostics', 'get', 'getDiagnostics', {
+    summary: 'Read system diagnostics',
+  });
+  add('/api/v1/config/export', 'get', 'exportConfig', {
+    summary: 'Export configuration or a restorable secret backup',
+    parameters: [
+      {
+        name: 'includeSecrets',
+        in: 'query',
+        schema: { type: 'boolean', default: false },
+      },
+    ],
+  });
+  add('/api/v1/config/import', 'post', 'importConfig', {
+    summary: 'Atomically import a restorable configuration backup',
+    body: true,
+  });
+  add('/api/v1/endpoints/aggregate', 'get', 'getAggregateEndpoint', {
+    summary: 'Read the aggregate MCP endpoint',
+  });
+
+  return {
+    openapi: '3.1.0',
+    info: {
+      title: 'MCP Home Control API',
+      version: '0.1.0',
+      description: 'Complete single-user management API for MCP Home.',
+    },
+    servers: [{ url: publicUrl.toString().replace(/\/$/, '') }],
+    paths,
+    components: {
+      securitySchemes: {
+        controlApiKey: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'mch_ctl_',
+        },
+        controlSession: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: 'mcp_home_session',
+        },
+      },
+      responses: {
+        BadRequest: problemResponse('Request validation failed'),
+        Unauthorized: problemResponse('Control credential required'),
+        NotFound: problemResponse('Resource not found'),
+        Conflict: problemResponse('Resource conflict'),
+      },
+    },
+  };
+}
+
+function problemResponse(description: string): Record<string, unknown> {
+  return {
+    description,
+    content: {
+      'application/json': {
+        schema: {
+          type: 'object',
+          required: ['error'],
+          properties: {
+            error: {
+              type: 'object',
+              required: ['code', 'message'],
+              properties: {
+                code: { type: 'string' },
+                message: { type: 'string' },
+                detail: {},
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
+function capitalize(value: string): string {
+  return `${value.slice(0, 1).toUpperCase()}${value.slice(1)}`;
+}

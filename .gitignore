@@ -1,0 +1,11 @@
+.vibe/
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+data/
+tmp/
