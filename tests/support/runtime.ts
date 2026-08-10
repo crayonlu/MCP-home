@@ -24,6 +24,7 @@ export function createTestRuntime(): TestRuntime {
     allowedHosts: ['mcp-home.test'],
     logLevel: 'error',
     oauthUrlClientId: true,
+    marketDir: '/tmp/mcp-home-test-market',
   });
   return {
     runtime,

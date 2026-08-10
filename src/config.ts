@@ -1,5 +1,5 @@
 import { chmodSync, mkdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, join } from 'node:path';
 import { z } from 'zod';
 
 const publicUrlSchema = z.url().superRefine((value, context) => {
@@ -30,6 +30,7 @@ const envSchema = z
     MCP_HOME_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     MCP_HOME_OAUTH_URL_CLIENT_ID: z.enum(['true', 'false']).default('true'),
     MCP_HOME_WEB_DIR: z.string().optional(),
+    MCP_HOME_MARKET_DIR: z.string().optional(),
   })
   .superRefine((value, context) => {
     if (value.MCP_HOME_BOOTSTRAP_CONTROL_KEY === value.MCP_HOME_MASTER_KEY) {
@@ -53,6 +54,7 @@ export interface RuntimeConfig {
   logLevel: 'debug' | 'info' | 'warn' | 'error';
   oauthUrlClientId: boolean;
   webDir?: string;
+  marketDir: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
@@ -80,5 +82,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     ...(parsed.MCP_HOME_WEB_DIR === undefined
       ? {}
       : { webDir: resolve(parsed.MCP_HOME_WEB_DIR) }),
+    marketDir: resolve(parsed.MCP_HOME_MARKET_DIR ?? join(dataDir, 'market')),
   };
 }

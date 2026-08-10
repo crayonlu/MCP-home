@@ -6,6 +6,7 @@ import { bearerToken } from '../security/auth-service.js';
 import { ControlSessionService, cookieValue } from '../security/control-session.js';
 import type { Store } from '../storage/store.js';
 import type { ControlService } from './control-service.js';
+import type { MarketService } from '../market/market-service.js';
 import { controlOpenApi } from './openapi.js';
 
 const keyInputSchema = z.object({ name: z.string().min(1).max(120) });
@@ -41,6 +42,7 @@ export function mountControlApi(
     publicUrl: URL;
     secureCookies: boolean;
     logger: Logger;
+    market?: MarketService;
   },
 ): void {
   const route =
@@ -252,6 +254,25 @@ export function mountControlApi(
     '/api/v1/endpoints/aggregate',
     route(() => options.service.aggregateEndpoint()),
   );
+
+  const market = options.market;
+  if (market) {
+    app.get('/api/v1/market', route(() => market.list()));
+    app.post(
+      '/api/v1/market/:id/install',
+      route(async (context) => {
+        const body = (await context.req.json()) as { values?: Record<string, string> };
+        return market.install(context.req.param('id'), body.values ?? {});
+      }),
+    );
+    app.post(
+      '/api/v1/market/:id/uninstall',
+      route(async (context) => {
+        await market.uninstall(context.req.param('id'));
+        return { uninstalled: true };
+      }),
+    );
+  }
 }
 
 function mountKeyRoutes(

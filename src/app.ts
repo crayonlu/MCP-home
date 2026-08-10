@@ -6,6 +6,7 @@ import { DataPlane } from './data-plane/data-plane.js';
 import { GatewayServerFactory } from './data-plane/gateway-server.js';
 import { CapabilityRegistry } from './data-plane/registry.js';
 import { createLogger, type Logger } from './observability/logger.js';
+import { MarketService } from './market/market-service.js';
 import { ApiKeyHasher } from './security/api-keys.js';
 import { AuthService } from './security/auth-service.js';
 import { ControlSessionService } from './security/control-session.js';
@@ -74,6 +75,7 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
     publicUrl: config.publicUrl,
     secureCookies: config.publicUrl.protocol === 'https:',
     logger,
+    market: new MarketService(control, config.marketDir),
   });
   mountOAuthRoutes(app, {
     oauth,

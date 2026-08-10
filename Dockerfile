@@ -9,6 +9,7 @@ ENV MCP_HOME_WEB_DIR=/app/web-dist
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
+RUN npm install -g resend-mcp@latest @hexsleeves/tailscale-mcp-server@latest
 COPY dist ./dist
 COPY web/dist ./web-dist
 

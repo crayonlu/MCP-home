@@ -1,0 +1,358 @@
+export interface MarketRequirement {
+  name: string
+  description: string
+  secret?: boolean
+  required?: boolean
+}
+
+export type CredentialSpec =
+  | { type: 'oauth' }
+  | { type: 'env' }
+  | { type: 'bearer'; tokenKey: string }
+  | { type: 'api-key'; headerName: string; valueKey: string }
+  | { type: 'headers'; headers: { name: string; valueKey?: string; value?: string }[] }
+
+export interface MarketEntry {
+  id: string
+  name: string
+  description: string
+  category: string
+  kind: 'home-stdio' | 'remote'
+  package?: string
+  bin?: string
+  url?: string
+  credential: CredentialSpec
+  requires: MarketRequirement[]
+  argsTemplate?: string[]
+  docs?: string
+}
+
+export const marketCatalog: MarketEntry[] = [
+  {
+    id: 'github',
+    name: 'GitHub',
+    description: 'Repos, issues, pull requests, code search, and Actions workflows',
+    category: 'devtools',
+    kind: 'remote',
+    url: 'https://api.githubcopilot.com/mcp/',
+    credential: { type: 'oauth' },
+    requires: [],
+    docs: 'https://github.com/github/github-mcp-server',
+  },
+  {
+    id: 'linear',
+    name: 'Linear',
+    description: 'Issues, projects, cycles, and team tracking',
+    category: 'productivity',
+    kind: 'remote',
+    url: 'https://mcp.linear.app/mcp',
+    credential: { type: 'oauth' },
+    requires: [],
+    docs: 'https://linear.app/docs/mcp',
+  },
+  {
+    id: 'slack',
+    name: 'Slack',
+    description: 'Channels, messages, users, and workspace search',
+    category: 'comms',
+    kind: 'remote',
+    url: 'https://mcp.slack.com/mcp',
+    credential: { type: 'oauth' },
+    requires: [],
+    docs: 'https://api.slack.com/mcp',
+  },
+  {
+    id: 'vercel',
+    name: 'Vercel',
+    description: 'Deployments, build logs, environments, and previews',
+    category: 'devtools',
+    kind: 'remote',
+    url: 'https://mcp.vercel.com/mcp',
+    credential: { type: 'oauth' },
+    requires: [],
+    docs: 'https://vercel.com/docs/integrations/mcp',
+  },
+  {
+    id: 'stripe',
+    name: 'Stripe',
+    description: 'Payments, customers, invoices, and subscriptions',
+    category: 'finance',
+    kind: 'remote',
+    url: 'https://mcp.stripe.com',
+    credential: { type: 'oauth' },
+    requires: [],
+    docs: 'https://stripe.com/docs/mcp',
+  },
+  {
+    id: 'figma',
+    name: 'Figma',
+    description: 'Design files, components, comments, and FigJam',
+    category: 'design',
+    kind: 'remote',
+    url: 'https://mcp.figma.com/mcp',
+    credential: { type: 'oauth' },
+    requires: [],
+    docs: 'https://www.figma.com/mcp',
+  },
+  {
+    id: 'sentry',
+    name: 'Sentry',
+    description: 'Error tracking, issues, releases, and performance',
+    category: 'devtools',
+    kind: 'remote',
+    url: 'https://mcp.sentry.dev/mcp',
+    credential: { type: 'oauth' },
+    requires: [],
+    docs: 'https://docs.sentry.io/integrations/mcp/',
+  },
+  {
+    id: 'supabase',
+    name: 'Supabase',
+    description: 'Databases, auth, storage, edge functions, and SQL',
+    category: 'data',
+    kind: 'remote',
+    url: 'https://mcp.supabase.com/mcp',
+    credential: { type: 'oauth' },
+    requires: [],
+    docs: 'https://supabase.com/docs/guides/getting-started/mcp',
+  },
+  {
+    id: 'notion',
+    name: 'Notion',
+    description: 'Pages, databases, comments, and workspace search',
+    category: 'productivity',
+    kind: 'remote',
+    url: 'https://mcp.notion.com/mcp',
+    credential: { type: 'oauth' },
+    requires: [],
+    docs: 'https://developers.notion.com/reference/mcp',
+  },
+  {
+    id: 'cloudflare',
+    name: 'Cloudflare',
+    description: 'Workers, KV, R2, D1, and DNS management',
+    category: 'infra',
+    kind: 'remote',
+    url: 'https://mcp.cloudflare.com/mcp',
+    credential: { type: 'oauth' },
+    requires: [],
+    docs: 'https://developers.cloudflare.com/agents/mcp/',
+  },
+  {
+    id: 'context7',
+    name: 'Context7',
+    description: 'Up-to-date, version-specific library documentation',
+    category: 'devtools',
+    kind: 'remote',
+    url: 'https://mcp.context7.com/mcp',
+    credential: { type: 'bearer', tokenKey: 'CONTEXT7_API_KEY' },
+    requires: [
+      { name: 'CONTEXT7_API_KEY', description: 'Context7 API key (optional)', secret: true },
+    ],
+    docs: 'https://github.com/upstash/context7-mcp',
+  },
+  {
+    id: 'exa',
+    name: 'Exa',
+    description: 'AI-powered semantic web search for agents',
+    category: 'search',
+    kind: 'remote',
+    url: 'https://mcp.exa.ai/mcp',
+    credential: { type: 'bearer', tokenKey: 'EXA_API_KEY' },
+    requires: [{ name: 'EXA_API_KEY', description: 'Exa API key', secret: true, required: true }],
+    docs: 'https://github.com/exa-labs/exa-mcp-server',
+  },
+  {
+    id: 'tavily',
+    name: 'Tavily',
+    description: 'Real-time web search and research retrieval',
+    category: 'search',
+    kind: 'remote',
+    url: 'https://mcp.tavily.com/mcp',
+    credential: { type: 'bearer', tokenKey: 'TAVILY_API_KEY' },
+    requires: [
+      { name: 'TAVILY_API_KEY', description: 'Tavily API key', secret: true, required: true },
+    ],
+    docs: 'https://docs.tavily.com/documentation/mcp',
+  },
+  {
+    id: 'deepwiki',
+    name: 'DeepWiki',
+    description: 'AI-powered codebase context and answers (no auth)',
+    category: 'devtools',
+    kind: 'remote',
+    url: 'https://mcp.deepwiki.com/mcp',
+    credential: { type: 'oauth' },
+    requires: [],
+    docs: 'https://docs.devin.ai/work-with-devin/deepwiki-mcp',
+  },
+  {
+    id: 'firecrawl',
+    name: 'Firecrawl',
+    description: 'Web scraping, crawling, and site mapping',
+    category: 'search',
+    kind: 'remote',
+    url: 'https://mcp.firecrawl.dev/v2/mcp',
+    credential: { type: 'bearer', tokenKey: 'FIRECRAWL_API_KEY' },
+    requires: [
+      {
+        name: 'FIRECRAWL_API_KEY',
+        description: 'Firecrawl API key',
+        secret: true,
+        required: true,
+      },
+    ],
+    docs: 'https://docs.firecrawl.dev/mcp',
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    description: 'Unified access to hundreds of LLM models',
+    category: 'ai',
+    kind: 'remote',
+    url: 'https://mcp.openrouter.ai/mcp',
+    credential: { type: 'bearer', tokenKey: 'OPENROUTER_API_KEY' },
+    requires: [
+      {
+        name: 'OPENROUTER_API_KEY',
+        description: 'OpenRouter API key',
+        secret: true,
+        required: true,
+      },
+    ],
+    docs: 'https://openrouter.ai/docs',
+  },
+  {
+    id: 'apifox',
+    name: 'Apifox',
+    description: 'API design, debugging, and documentation workspace',
+    category: 'devtools',
+    kind: 'remote',
+    url: 'https://api.apifox.com/mcp',
+    credential: {
+      type: 'headers',
+      headers: [
+        { name: 'Authorization', valueKey: 'APIFOX_TOKEN' },
+        { name: 'X-Apifox-Api-Version', value: '2025-09-01' },
+      ],
+    },
+    requires: [
+      { name: 'APIFOX_TOKEN', description: 'Apifox access token', secret: true, required: true },
+    ],
+    docs: 'https://apifox.com/help/ai/agent/',
+  },
+  {
+    id: 'resend',
+    name: 'Resend',
+    description: 'Send transactional email and manage audiences',
+    category: 'email',
+    kind: 'home-stdio',
+    package: 'resend-mcp',
+    bin: 'resend-mcp',
+    credential: { type: 'env' },
+    requires: [
+      { name: 'RESEND_API_KEY', description: 'Resend API key', secret: true, required: true },
+    ],
+    docs: 'https://resend.com/docs',
+  },
+  {
+    id: 'tailscale',
+    name: 'Tailscale',
+    description: 'Manage your tailnet, nodes, ACLs, and devices',
+    category: 'infra',
+    kind: 'home-stdio',
+    package: '@hexsleeves/tailscale-mcp-server',
+    bin: 'tailscale-mcp-server',
+    credential: { type: 'env' },
+    requires: [
+      { name: 'TAILSCALE_API_KEY', description: 'Tailscale API key', secret: true, required: true },
+      {
+        name: 'TAILSCALE_TAILNET',
+        description: 'Tailnet name (e.g. example.ts.net)',
+        required: true,
+      },
+    ],
+    docs: 'https://github.com/hexsleeves/tailscale-mcp-server',
+  },
+  {
+    id: 'playwright',
+    name: 'Playwright',
+    description: 'Browser automation, page inspection, and screenshots',
+    category: 'browser',
+    kind: 'home-stdio',
+    package: '@playwright/mcp',
+    bin: 'playwright-mcp',
+    credential: { type: 'env' },
+    requires: [],
+    docs: 'https://github.com/microsoft/playwright-mcp',
+  },
+  {
+    id: 'postgres',
+    name: 'PostgreSQL',
+    description: 'Read-only schema inspection and query execution',
+    category: 'data',
+    kind: 'home-stdio',
+    package: '@modelcontextprotocol/server-postgres',
+    bin: 'mcp-server-postgres',
+    credential: { type: 'env' },
+    requires: [
+      {
+        name: 'POSTGRES_CONNECTION_STRING',
+        description: 'Read-only connection string (postgresql://...)',
+        secret: true,
+        required: true,
+      },
+    ],
+    argsTemplate: ['${POSTGRES_CONNECTION_STRING}'],
+    docs: 'https://github.com/modelcontextprotocol/servers/tree/main/src/postgres',
+  },
+  {
+    id: 'sqlite',
+    name: 'SQLite',
+    description: 'Query local SQLite databases',
+    category: 'data',
+    kind: 'home-stdio',
+    package: '@modelcontextprotocol/server-sqlite',
+    bin: 'mcp-server-sqlite',
+    credential: { type: 'env' },
+    requires: [{ name: 'DB_PATH', description: 'Path to the SQLite database file', required: true }],
+    argsTemplate: ['${DB_PATH}'],
+    docs: 'https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite',
+  },
+  {
+    id: 'memory',
+    name: 'Memory',
+    description: 'Persistent knowledge graph across conversations',
+    category: 'ai',
+    kind: 'home-stdio',
+    package: '@modelcontextprotocol/server-memory',
+    bin: 'mcp-server-memory',
+    credential: { type: 'env' },
+    requires: [],
+    docs: 'https://github.com/modelcontextprotocol/servers/tree/main/src/memory',
+  },
+  {
+    id: 'sequential-thinking',
+    name: 'Sequential Thinking',
+    description: 'Structured multi-step reasoning and planning',
+    category: 'ai',
+    kind: 'home-stdio',
+    package: '@modelcontextprotocol/server-sequential-thinking',
+    bin: 'mcp-server-sequential-thinking',
+    credential: { type: 'env' },
+    requires: [],
+    docs: 'https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking',
+  },
+  {
+    id: 'fetch',
+    name: 'Fetch',
+    description: 'Fetch web pages and convert to markdown',
+    category: 'search',
+    kind: 'home-stdio',
+    package: 'mcp-server-fetch',
+    bin: 'mcp-server-fetch',
+    credential: { type: 'env' },
+    requires: [],
+    docs: 'https://github.com/modelcontextprotocol/servers/tree/main/src/fetch',
+  },
+]

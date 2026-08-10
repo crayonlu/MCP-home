@@ -237,6 +237,27 @@ endpoint
   .command('server <id>')
   .action(run((client, id: string) => client.request('GET', `/api/v1/servers/${id}/endpoint`)));
 
+const market = program.command('market').description('Browse and install MCP servers from the catalog');
+market
+  .command('list')
+  .description('List catalog entries with install status')
+  .action(run((client) => client.request('GET', '/api/v1/market')));
+market
+  .command('install <id>')
+  .description('Install a catalog entry (fill required values with --set KEY=value)')
+  .option('--set <value>', 'set a value as KEY=value (repeatable)', collectValues, {})
+  .action(
+    run((client, id: string, command: Command) =>
+      client.request('POST', `/api/v1/market/${id}/install`, {
+        values: command.opts().set,
+      }),
+    ),
+  );
+market
+  .command('uninstall <id>')
+  .description('Remove an installed catalog entry (server + credential)')
+  .action(run((client, id: string) => client.request('POST', `/api/v1/market/${id}/uninstall`)));
+
 program.command('status').action(run((client) => client.request('GET', '/api/v1/overview')));
 program.command('doctor').action(run((client) => client.request('GET', '/api/v1/diagnostics')));
 program
@@ -435,4 +456,15 @@ function parsePositiveInt(value: string | number): number {
     throw new Error(`Expected a positive integer, got "${value}"`);
   }
   return parsed;
+}
+
+function collectValues(
+  value: string,
+  previous: Record<string, string>,
+): Record<string, string> {
+  const index = value.indexOf('=');
+  if (index <= 0) {
+    throw new Error(`Expected KEY=value, got "${value}"`);
+  }
+  return { ...previous, [value.slice(0, index)]: value.slice(index + 1) };
 }
