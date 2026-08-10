@@ -20,9 +20,9 @@ export function Dialog({
   return (
     <BaseDialog.Root open={open} onOpenChange={onOpenChange}>
       <BaseDialog.Portal>
-        <BaseDialog.Backdrop className="fixed inset-0 z-50 bg-overlay transition-opacity duration-150 data-[enter]:opacity-0 data-[enter]:opacity-100 data-[exit]:opacity-100 data-[exit]:opacity-0" />
+        <BaseDialog.Backdrop className="fixed inset-0 z-50 bg-overlay transition-opacity duration-150 data-[starting-style]:opacity-0 data-[exit]:opacity-0" />
         <BaseDialog.Popup
-          className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,var(--width))] -translate-x-1/2 -translate-y-1/2 bg-surface p-5 shadow-2xl shadow-black/50 transition-[opacity,transform] duration-150 data-[enter]:scale-95 data-[enter]:opacity-0 data-[enter]:scale-100 data-[enter]:opacity-100 data-[exit]:scale-95 data-[exit]:opacity-0"
+          className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,var(--width))] -translate-x-1/2 -translate-y-1/2 bg-surface p-5 shadow-2xl shadow-black/50 transition-[opacity,transform] duration-150 data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[exit]:scale-95 data-[exit]:opacity-0"
           style={{ '--width': `${width}px` } as CSSProperties}
         >
           <div className="mb-4 flex items-center justify-between">

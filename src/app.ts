@@ -90,7 +90,7 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
 
   if (config.webDir) {
     app.get('/assets/*', serveStatic({ root: config.webDir }));
-    app.get('*', (context, next) => {
+    app.get('*', async (context, next) => {
       const path = context.req.path;
       if (
         path.startsWith('/api') ||
@@ -100,6 +100,10 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
         path === '/readyz'
       ) {
         return next();
+      }
+      const accept = context.req.header('Accept') ?? '';
+      if (!accept.includes('text/html')) {
+        return serveStatic({ root: config.webDir })(context, next);
       }
       return serveStatic({ path: 'index.html', root: config.webDir })(context, next);
     });

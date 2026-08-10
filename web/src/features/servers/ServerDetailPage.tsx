@@ -13,7 +13,7 @@ import { useToast } from '../../components/ui/Toast'
 import { Badge, StatusDot } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { CopyButton } from '../../components/ui/CopyButton'
-import { TabsNav, TabPanels, type TabItem } from '../../components/ui/Tabs'
+import { TabsView, type TabItem } from '../../components/ui/Tabs'
 import { ServerFormSheet, type ServerFormValue } from './ServerForm'
 import { runtimeStatusLabel, runtimeStatusMeta } from '../../app/status'
 import type { ServerRecord } from '../../api/types'
@@ -88,13 +88,10 @@ export function ServerDetailPage() {
         </div>
       </div>
 
-      <div>
-        <TabsNav tabs={tabs} value={tab} onChange={setTab} />
-      </div>
-
-      <TabPanels
+      <TabsView
         tabs={tabs}
         value={tab}
+        onChange={setTab}
         render={(value) => {
           if (value === 'overview') {
             return (

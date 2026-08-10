@@ -6,15 +6,17 @@ export interface TabItem {
   label: string
 }
 
-export function TabsNav({
+export function TabsView({
   tabs,
   value,
   onChange,
+  render,
   className = '',
 }: {
   tabs: TabItem[]
   value: string
   onChange: (value: string) => void
+  render: (value: string) => ReactNode
   className?: string
 }) {
   return (
@@ -30,26 +32,15 @@ export function TabsNav({
           </Tabs.Tab>
         ))}
       </Tabs.List>
-    </Tabs.Root>
-  )
-}
-
-export function TabPanels({
-  tabs,
-  value,
-  render,
-}: {
-  tabs: TabItem[]
-  value: string
-  render: (value: string) => ReactNode
-}) {
-  return (
-    <>
       {tabs.map((tab) => (
-        <Tabs.Panel key={tab.value} value={tab.value} className={value === tab.value ? '' : 'hidden'}>
+        <Tabs.Panel
+          key={tab.value}
+          value={tab.value}
+          className={value === tab.value ? 'pt-4' : 'hidden'}
+        >
           {render(tab.value)}
         </Tabs.Panel>
       ))}
-    </>
+    </Tabs.Root>
   )
 }

@@ -86,8 +86,8 @@ export function useEvents(limit = 100, level?: EventLevel) {
 
 export function useServerCapabilities(id: string) {
   return useQuery({
-    queryKey: ['servers', id, 'capability'],
-    queryFn: () => api.get<CapabilitySnapshot>(`/api/v1/servers/${id}/capability`),
+    queryKey: ['servers', id, 'capabilities'],
+    queryFn: () => api.get<CapabilitySnapshot>(`/api/v1/servers/${id}/capabilities`),
     enabled: Boolean(id),
   })
 }

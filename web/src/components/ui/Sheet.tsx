@@ -27,15 +27,15 @@ export function Sheet({
   const bottom = resolvedSide === 'bottom'
 
   const positionClass = bottom
-    ? `inset-x-0 bottom-0 max-h-[92dvh] translate-y-full data-[enter]:translate-y-0 data-[exit]:translate-y-full`
-    : `right-0 top-0 h-dvh translate-x-full data-[enter]:translate-x-0 data-[exit]:translate-x-full`
+    ? `inset-x-0 bottom-0 max-h-[92dvh] data-[starting-style]:translate-y-full data-[exit]:translate-y-full`
+    : `right-0 top-0 h-dvh data-[starting-style]:translate-x-full data-[exit]:translate-x-full`
 
   const sizeStyle: CSSProperties = bottom ? {} : { width: `min(100vw, ${width}px)` }
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 bg-overlay transition-opacity duration-150 data-[enter]:opacity-0 data-[enter]:opacity-100 data-[exit]:opacity-100 data-[exit]:opacity-0" />
+        <Dialog.Backdrop className="fixed inset-0 z-50 bg-overlay opacity-0 transition-opacity duration-150 data-[enter]:opacity-100" />
         <Dialog.Popup
           className={`fixed z-50 flex flex-col bg-surface shadow-2xl shadow-black/50 ${positionClass} ${motionSafe}`}
           style={sizeStyle}
