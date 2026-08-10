@@ -1,20 +1,3 @@
-FROM node:24-alpine AS web-build
-
-WORKDIR /web
-COPY web/package.json web/package-lock.json ./
-RUN npm ci
-COPY web/ ./
-RUN npm run build
-
-FROM node:24-alpine AS build
-
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY tsconfig.json tsconfig.build.json ./
-COPY src ./src
-RUN npm run build:server
-
 FROM node:24-alpine AS runtime
 
 ENV NODE_ENV=production
@@ -26,8 +9,8 @@ ENV MCP_HOME_WEB_DIR=/app/web-dist
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
-COPY --from=build /app/dist ./dist
-COPY --from=web-build /web/dist ./web-dist
+COPY dist ./dist
+COPY web/dist ./web-dist
 
 RUN mkdir -p /data && chown -R node:node /data /app
 USER node
