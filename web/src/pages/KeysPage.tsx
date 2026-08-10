@@ -1,303 +1,257 @@
-import * as Tabs from '@radix-ui/react-tabs';
-import { KeyRound, Lock, Plus, Shield, Trash2, type LucideIcon } from 'lucide-react';
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { z } from 'zod';
-import { Button } from '../components/ui/Button.js';
-import { ConfirmDialog } from '../components/ui/ConfirmDialog.js';
-import { CopyField } from '../components/ui/CopyField.js';
-import { Modal } from '../components/ui/Dialog.js';
-import { EmptyState, LoadError, Page } from '../components/ui/Page.js';
-import { api, errorMessage } from '../lib/api.js';
-import { apiKeyRecordSchema, issuedKeySchema, type ApiKeyRecord } from '../lib/contracts.js';
+import { useState, type FormEvent } from 'react';
+import { toast } from 'sonner';
+import { MoreHorizontal, Plus } from 'lucide-react';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { Button } from '@/components/ui/button';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import { SecretReveal } from '@/components/shared/SecretReveal';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { cn } from '@/lib/utils';
+import { api, apiVoid, errorMessage } from '@/lib/api';
+import { apiKeyRecordSchema, issuedKeySchema, type ApiKeyRecord } from '@/lib/contracts';
+import { useResource } from '@/lib/hooks';
+import { relativeDate } from '@/lib/format';
 
-type KeyKind = 'control' | 'access';
+type Kind = 'access' | 'control';
 
-export function KeysPage({ notify }: { notify(title: string, detail?: string): void }): ReactNode {
-  const [control, setControl] = useState<ApiKeyRecord[]>([]);
-  const [access, setAccess] = useState<ApiKeyRecord[]>([]);
-  const [creating, setCreating] = useState<KeyKind | null>(null);
-  const [secret, setSecret] = useState<{ value: string; kind: KeyKind } | null>(null);
+export function KeysPage() {
+  const [kind, setKind] = useState<Kind>('access');
+  const [creating, setCreating] = useState(false);
   const [revoking, setRevoking] = useState<ApiKeyRecord | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [secret, setSecret] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoadError(null);
-    try {
-      const [controlKeys, accessKeys] = await Promise.all([
-        api('/api/v1/control-keys', apiKeyRecordSchema.array()),
-        api('/api/v1/access-keys', apiKeyRecordSchema.array()),
-      ]);
-      setControl(controlKeys);
-      setAccess(accessKeys);
-    } catch (cause) {
-      setLoadError(errorMessage(cause));
-    }
-  }, []);
+  const list = useResource(`/api/v1/${kind}-keys`, apiKeyRecordSchema.array());
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const reload = () => list.reload();
 
   return (
-    <Page
-      eyebrow="Access boundary"
-      title="API Keys"
-      description="控制面和数据面使用两类不可互换的身份，减少 Harness 的权限。"
-    >
-      {loadError && <LoadError message={loadError} onRetry={load} />}
-      <div className="key-boundary">
-        <Boundary
-          icon={Lock}
-          index="01"
-          title="Control API Key"
-          description="管理 Server、Credential、Key 与运行状态。只用于 Web、CLI 或管理 Agent。"
-          prefix="mch_ctl_"
-        />
-        <Boundary
-          icon={Shield}
-          index="02"
-          title="MCP Access API Key"
-          description="只能调用聚合或独立 MCP endpoint，不能读取和修改控制面。"
-          prefix="mch_mcp_"
-        />
-      </div>
-      <Tabs.Root className="tabs key-tabs" defaultValue="access">
-        <Tabs.List className="tabs-list">
-          <Tabs.Trigger value="access">
-            <Shield size={15} />
-            MCP Access
-          </Tabs.Trigger>
-          <Tabs.Trigger value="control">
-            <Lock size={15} />
-            Control API
-          </Tabs.Trigger>
-        </Tabs.List>
-        <Tabs.Content value="access" className="tab-panel">
-          <KeyList
-            kind="access"
-            items={access}
-            onCreate={() => setCreating('access')}
-            onRevoke={setRevoking}
-          />
-        </Tabs.Content>
-        <Tabs.Content value="control" className="tab-panel">
-          <KeyList
-            kind="control"
-            items={control}
-            onCreate={() => setCreating('control')}
-            onRevoke={setRevoking}
-          />
-        </Tabs.Content>
-      </Tabs.Root>
-
-      <CreateKeyModal
-        kind={creating}
-        onOpenChange={(open) => {
-          if (!open) setCreating(null);
-        }}
-        onCreated={async (kind, value) => {
-          setCreating(null);
-          setSecret({ kind, value });
-          await load();
-        }}
-      />
-      <Modal
-        open={secret !== null}
-        onOpenChange={(open) => {
-          if (!open) setSecret(null);
-        }}
-        title="保存新的 API Key"
-        description="完整 Secret 只显示这一次。关闭后无法再次读取。"
-      >
-        {secret && (
-          <div className="secret-panel">
-            <span>{secret.kind === 'control' ? 'Control API Key' : 'MCP Access API Key'}</span>
-            <CopyField value={secret.value} />
-            <div className="dialog-actions">
-              <Button onClick={() => setSecret(null)}>我已安全保存</Button>
-            </div>
-          </div>
-        )}
-      </Modal>
-      <ConfirmDialog
-        open={revoking !== null}
-        onOpenChange={(open) => {
-          if (!open) setRevoking(null);
-        }}
-        title="撤销这个 API Key？"
-        description={
-          revoking ? `${revoking.name} 将立即失效，正在使用它的客户端需要更新配置。` : ''
-        }
-        confirmLabel="撤销 Key"
-        onConfirm={async () => {
-          if (!revoking) return;
-          const target = revoking;
-          const path = target.kind === 'control' ? 'control-keys' : 'access-keys';
-          await api(`/api/v1/${path}/${target.id}`, z.unknown(), { method: 'DELETE' });
-          setRevoking(null);
-          notify(`${target.name} 已撤销`);
-          await load();
-        }}
-      />
-    </Page>
-  );
-}
-
-function Boundary({
-  icon: Icon,
-  index,
-  title,
-  description,
-  prefix,
-}: {
-  icon: LucideIcon;
-  index: string;
-  title: string;
-  description: string;
-  prefix: string;
-}): ReactNode {
-  return (
-    <article className="boundary-card">
-      <div>
-        <span className="boundary-icon">
-          <Icon size={17} />
-        </span>
-        <span className="section-index">{index}</span>
-      </div>
-      <h2>{title}</h2>
-      <p>{description}</p>
-      <code>{prefix}</code>
-    </article>
-  );
-}
-
-function KeyList({
-  kind,
-  items,
-  onCreate,
-  onRevoke,
-}: {
-  kind: KeyKind;
-  items: ApiKeyRecord[];
-  onCreate(): void;
-  onRevoke(key: ApiKeyRecord): void;
-}): ReactNode {
-  return (
-    <section className="key-list-block">
-      <div className="section-heading">
-        <div>
-          <span className="section-index">
-            {kind === 'control' ? 'Management identity' : 'Harness identity'}
-          </span>
-          <h2>{kind === 'control' ? 'Control API Keys' : 'MCP Access API Keys'}</h2>
-        </div>
-        <Button onClick={onCreate}>
-          <Plus size={15} />
-          创建 Key
-        </Button>
-      </div>
-      {items.length === 0 ? (
-        <EmptyState
-          title="没有 Key"
-          description={`创建一个 ${kind === 'control' ? 'Control API' : 'MCP Access'} Key。`}
-        />
-      ) : (
-        <div className="key-table">
-          <div className="key-row key-row-head">
-            <span>Name</span>
-            <span>Prefix</span>
-            <span>Last used</span>
-            <span>Created</span>
-            <span />
-          </div>
-          {items.map((item) => (
-            <div className="key-row" key={item.id}>
-              <div>
-                <KeyRound size={15} />
-                <strong>{item.name}</strong>
-              </div>
-              <code>{item.prefix}…</code>
-              <span>{item.lastUsedAt ? new Date(item.lastUsedAt).toLocaleString() : 'Never'}</span>
-              <span>{new Date(item.createdAt).toLocaleDateString()}</span>
-              <Button
-                variant="quiet"
-                size="icon"
-                aria-label="撤销"
-                disabled={item.revokedAt !== null}
-                onClick={() => onRevoke(item)}
-              >
-                <Trash2 size={15} />
-              </Button>
-            </div>
+    <>
+      <PageHeader title={kind === 'access' ? 'Access Keys' : 'Control Keys'}>
+        <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
+          {(['access', 'control'] as const).map((k) => (
+            <button
+              key={k}
+              onClick={() => setKind(k)}
+              className={cn(
+                'rounded px-2.5 py-1 text-xs transition-colors',
+                kind === k
+                  ? 'bg-secondary text-secondary-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {k === 'access' ? 'Access' : 'Control'}
+            </button>
           ))}
         </div>
-      )}
-    </section>
+        <Button size="sm" onClick={() => setCreating(true)}>
+          <Plus className="size-4" />
+          新建
+        </Button>
+      </PageHeader>
+
+      <div className="flex-1 overflow-auto p-6">
+        {list.error ? (
+          <div className="text-sm text-red-400">{list.error}</div>
+        ) : list.loading && !list.data ? (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : !list.data || list.data.length === 0 ? (
+          <EmptyState
+            title={`还没有 ${kind === 'access' ? 'Access' : 'Control'} Key`}
+            hint={kind === 'access' ? 'Access Key 供 Harness 连接 /mcp 端点。' : 'Control Key 用于登录控制台。'}
+          />
+        ) : (
+          <div className="overflow-hidden rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/30">
+                <tr className="text-left text-xs text-muted-foreground">
+                  <th className="px-4 py-2 font-medium">名称</th>
+                  <th className="px-4 py-2 font-medium">前缀</th>
+                  <th className="px-4 py-2 font-medium">创建</th>
+                  <th className="px-4 py-2 font-medium">最近使用</th>
+                  <th className="px-4 py-2 font-medium">状态</th>
+                  <th className="w-8 px-4 py-2" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {list.data.map((key) => (
+                  <tr key={key.id}>
+                    <td className="px-4 py-2.5 font-medium">{key.name}</td>
+                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{key.prefix}…</td>
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground">{relativeDate(key.createdAt)}</td>
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground">{relativeDate(key.lastUsedAt)}</td>
+                    <td className="px-4 py-2.5">
+                      {key.revokedAt ? (
+                        <Badge variant="outline" className="text-muted-foreground">已撤销</Badge>
+                      ) : (
+                        <Badge variant="outline" className="border-emerald-400/30 text-emerald-300">活跃</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      {!key.revokedAt && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon-xs" aria-label="操作">
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              className="text-red-400 focus:text-red-300"
+                              onSelect={() => setRevoking(key)}
+                            >
+                              撤销
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <CreateKeySheet
+        kind={kind}
+        open={creating}
+        onOpenChange={setCreating}
+        onCreated={(s) => {
+          setSecret(s);
+          reload();
+        }}
+      />
+
+      <SecretReveal
+        open={secret !== null}
+        onOpenChange={(o) => !o && setSecret(null)}
+        secret={secret}
+        label={kind === 'access' ? 'Access Key' : 'Control Key'}
+      />
+
+      <AlertDialog open={revoking !== null} onOpenChange={(o) => !o && setRevoking(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>撤销此 Key?</AlertDialogTitle>
+            <AlertDialogDescription>
+              撤销后该 Key 立即失效,且无法恢复。{revoking?.name}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!revoking) return;
+                try {
+                  await apiVoid(`/api/v1/${kind}-keys/${revoking.id}`, { method: 'DELETE' });
+                  toast.success('已撤销');
+                  setRevoking(null);
+                  reload();
+                } catch (cause) {
+                  toast.error('撤销失败', { description: errorMessage(cause) });
+                }
+              }}
+            >
+              撤销
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 
-function CreateKeyModal({
+function CreateKeySheet({
   kind,
+  open,
   onOpenChange,
   onCreated,
 }: {
-  kind: KeyKind | null;
+  kind: Kind;
+  open: boolean;
   onOpenChange(open: boolean): void;
-  onCreated(kind: KeyKind, value: string): void | Promise<void>;
-}): ReactNode {
+  onCreated(secret: string): void;
+}) {
+  const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    if (kind) setError(null);
-  }, [kind]);
-  const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-    if (!kind) return;
-    const form = new FormData(event.currentTarget);
-    const name = String(form.get('name') ?? '').trim();
-    if (name === '') return;
-    setError(null);
+
+  const submit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!name.trim()) return;
     setSaving(true);
     try {
-      const path = kind === 'control' ? 'control-keys' : 'access-keys';
-      const result = await api(`/api/v1/${path}`, issuedKeySchema, {
+      const res = await api(`/api/v1/${kind}-keys`, issuedKeySchema, {
         method: 'POST',
-        body: { name },
+        body: { name: name.trim() },
       });
-      await onCreated(kind, result.secret);
+      onCreated(res.secret);
+      setName('');
+      onOpenChange(false);
     } catch (cause) {
-      setError(errorMessage(cause));
+      toast.error('创建失败', { description: errorMessage(cause) });
     } finally {
       setSaving(false);
     }
   };
+
   return (
-    <Modal
-      open={kind !== null}
-      onOpenChange={onOpenChange}
-      title={`创建 ${kind === 'control' ? 'Control API' : 'MCP Access'} Key`}
-      description="为每个用途创建独立 Key，便于单独撤销和追踪。"
-    >
-      <form className="form-stack" onSubmit={(event) => void submit(event)}>
-        <label className="field">
-          <span>Key name</span>
-          <input
-            name="name"
-            placeholder={kind === 'control' ? 'Personal CLI' : 'Claude Code on MacBook'}
-            autoFocus
-            required
-          />
-        </label>
-        {error && <div className="inline-error">{error}</div>}
-        <div className="dialog-actions">
-          <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={saving}>
-            取消
-          </Button>
-          <Button type="submit" disabled={saving}>
-            {saving ? '正在创建' : '创建 Key'}
-          </Button>
-        </div>
-      </form>
-    </Modal>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full sm:max-w-sm">
+        <SheetHeader>
+          <SheetTitle>新建 {kind === 'access' ? 'Access' : 'Control'} Key</SheetTitle>
+          <SheetDescription>为这把 Key 命名,便于后续识别。</SheetDescription>
+        </SheetHeader>
+        <form onSubmit={(e) => void submit(e)} className="flex flex-1 flex-col gap-4 px-4">
+          <div className="space-y-1.5 pt-2">
+            <Label htmlFor="key-name">名称</Label>
+            <Input
+              id="key-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="laptop · ci · ci-prod"
+              autoFocus
+              required
+            />
+          </div>
+          <SheetFooter className="mt-auto">
+            <Button type="submit" disabled={saving}>
+              {saving ? '创建中…' : '创建'}
+            </Button>
+          </SheetFooter>
+        </form>
+      </SheetContent>
+    </Sheet>
   );
 }

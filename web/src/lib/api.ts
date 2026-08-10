@@ -35,6 +35,21 @@ export async function api<T>(path: string, schema: z.ZodType<T>, init: ApiInit =
   return schema.parse(body);
 }
 
+/** Fire-and-forget request that only needs success/failure, no body validation. */
+export async function apiVoid(path: string, init: ApiInit = {}): Promise<void> {
+  const response = await fetch(path, {
+    method: init.method ?? 'GET',
+    credentials: 'same-origin',
+    headers: init.body === undefined ? {} : { 'content-type': 'application/json' },
+    ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+  });
+  if (!response.ok) {
+    const body: unknown = await response.json().catch(() => null);
+    const problem = readProblem(body);
+    throw new ApiError(problem?.message ?? `HTTP ${response.status}`, response.status, problem?.code);
+  }
+}
+
 export async function login(controlKey: string): Promise<void> {
   const response = await fetch('/api/v1/session', {
     method: 'POST',

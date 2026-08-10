@@ -131,4 +131,36 @@ export type ServerStatus = z.infer<typeof serverStatusSchema>;
 export type CredentialRecord = z.infer<typeof credentialRecordSchema>;
 export type ApiKeyRecord = z.infer<typeof apiKeyRecordSchema>;
 export type Overview = z.infer<typeof overviewSchema>;
-export type View = 'overview' | 'servers' | 'credentials' | 'keys' | 'diagnostics';
+export const eventRecordSchema = z.object({
+  id: z.string(),
+  level: z.enum(['debug', 'info', 'warn', 'error']),
+  type: z.string(),
+  serverId: z.string().nullable(),
+  message: z.string(),
+  detail: unknownRecordSchema,
+  createdAt: z.string(),
+});
+
+export const diagnosticsSchema = z.object({
+  ok: z.boolean(),
+  database: z.string(),
+  servers: z.array(
+    z.object({
+      id: z.string(),
+      slug: z.string(),
+      enabled: z.boolean(),
+      status: z.string(),
+      hasSnapshot: z.boolean(),
+    }),
+  ),
+});
+
+export const keyListSchema = z.object({
+  key: apiKeyRecordSchema,
+  secret: z.string(),
+});
+
+export type EventRecord = z.infer<typeof eventRecordSchema>;
+export type Diagnostics = z.infer<typeof diagnosticsSchema>;
+
+export type View = 'overview' | 'servers' | 'credentials' | 'keys' | 'logs';

@@ -1,155 +1,107 @@
+import { ArrowRight } from 'lucide-react';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { CopyButton } from '@/components/shared/CopyButton';
+import { StatusLabel } from '@/components/shared/StatusDot';
+import { useResource, type Route } from '@/lib/hooks';
 import {
-  ArrowUpRight,
-  Boxes,
-  CircleGauge,
-  KeyRound,
-  Server,
-  ShieldCheck,
-  type LucideIcon,
-} from 'lucide-react';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Button } from '../components/ui/Button.js';
-import { CopyField } from '../components/ui/CopyField.js';
-import { LoadError, Page } from '../components/ui/Page.js';
-import { api, errorMessage } from '../lib/api.js';
-import { overviewSchema, type Overview, type View } from '../lib/contracts.js';
+  diagnosticsSchema,
+  endpointSchema,
+  eventRecordSchema,
+  overviewSchema,
+} from '@/lib/contracts';
+import { relativeDate } from '@/lib/format';
 
-export function OverviewPage({ onNavigate }: { onNavigate(view: View): void }): ReactNode {
-  const [overview, setOverview] = useState<Overview | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export function OverviewPage({ onNavigate }: { onNavigate(route: Route): void }) {
+  const overview = useResource('/api/v1/overview', overviewSchema);
+  const endpoint = useResource('/api/v1/endpoints/aggregate', endpointSchema);
+  const diag = useResource('/api/v1/diagnostics', diagnosticsSchema, { pollMs: 60000 });
+  const events = useResource('/api/v1/events?limit=8', eventRecordSchema.array(), {
+    pollMs: 8000,
+  });
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      setOverview(await api('/api/v1/overview', overviewSchema));
-    } catch (cause) {
-      setError(errorMessage(cause));
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const s = overview.data?.servers;
+  const stats = [
+    { label: 'Servers', value: s?.total ?? '—' },
+    { label: 'Enabled', value: s?.enabled ?? '—' },
+    { label: 'Ready', value: s?.ready ?? '—' },
+    { label: 'Unhealthy', value: s?.unhealthy ?? '—' },
+    { label: 'Credentials', value: overview.data?.credentials ?? '—' },
+  ];
 
   return (
-    <Page
-      eyebrow="System overview"
-      title="你的 MCP，状态清晰，入口稳定。"
-      description="管理上游连接、凭据与对外访问，不改变 Harness 的标准 MCP 接入方式。"
-      action={
-        <Button onClick={() => onNavigate('servers')}>
-          <Server size={16} strokeWidth={1.8} />
-          管理 Servers
-        </Button>
-      }
-    >
-      {error && <LoadError message={error} onRetry={load} />}
-      <div className="metric-grid">
-        <Metric
-          icon={Boxes}
-          label="MCP Servers"
-          value={overview?.servers.total ?? '—'}
-          detail={overview ? `${overview.servers.enabled} enabled` : 'Loading'}
-        />
-        <Metric
-          icon={CircleGauge}
-          label="Runtime"
-          value={overview?.servers.ready ?? '—'}
-          detail={overview ? `${overview.servers.unhealthy} need attention` : 'Loading'}
-        />
-        <Metric
-          icon={ShieldCheck}
-          label="Credentials"
-          value={overview?.credentials ?? '—'}
-          detail="Encrypted at rest"
-        />
-        <Metric icon={KeyRound} label="Boundary" value="2 keys" detail="Control / Access" />
-      </div>
+    <>
+      <PageHeader title="Overview" />
+      <div className="flex-1 space-y-6 overflow-auto p-6">
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {stats.map((m) => (
+            <div
+              key={m.label}
+              className="rounded-lg border border-border bg-card px-4 py-3"
+            >
+              <div className="text-2xl font-semibold tracking-tight tabular-nums">{m.value}</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">{m.label}</div>
+            </div>
+          ))}
+        </section>
 
-      <section className="endpoint-feature">
-        <div className="endpoint-copy">
-          <span className="section-index">01 / Aggregate endpoint</span>
-          <h2>Harness 只配置一次。</h2>
-          <p>
-            聚合入口自动命名空间化所有能力；需要原始名称与扩展语义时，使用对应 Server 的独立入口。
-          </p>
-        </div>
-        <div className="endpoint-value">
-          <span>Streamable HTTP</span>
-          {overview ? (
-            <CopyField value={overview.endpoints.aggregate} />
+        <section className="rounded-lg border border-border bg-card p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-xs font-medium text-muted-foreground">聚合 Endpoint</h2>
+            <StatusLabel status={diag.data?.ok ? 'ready' : 'degraded'} />
+          </div>
+          {endpoint.data ? (
+            <div className="flex items-center gap-2">
+              <code className="flex-1 truncate rounded-md bg-muted/40 px-2.5 py-1.5 font-mono text-xs text-foreground">
+                {endpoint.data.url}
+              </code>
+              <CopyButton value={endpoint.data.url} label="复制 URL" />
+            </div>
           ) : (
-            <div className="skeleton-line" />
+            <div className="h-8 animate-pulse rounded-md bg-muted/40" />
           )}
-        </div>
-      </section>
+        </section>
 
-      <div className="principle-grid">
-        <Principle
-          index="02"
-          title="凭据不出 Home"
-          description="OAuth、OIDC、API Key 与自定义 Header 在本地加密保存，Harness 永远看不到上游 Secret。"
-          action={
-            <Button variant="quiet" onClick={() => onNavigate('credentials')}>
-              查看 Credentials <ArrowUpRight size={15} />
-            </Button>
-          }
-        />
-        <Principle
-          index="03"
-          title="协议能力不打折"
-          description="Tools、Resources、Prompts、Completion、Subscriptions、MRTR、Tasks 与 MCP Apps 都走协议桥接。"
-          action={
-            <Button variant="quiet" onClick={() => onNavigate('diagnostics')}>
-              查看 Diagnostics <ArrowUpRight size={15} />
-            </Button>
-          }
-        />
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-xs font-medium text-muted-foreground">最近事件</h2>
+            <button
+              onClick={() => onNavigate('logs')}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              全部 <ArrowRight className="size-3" />
+            </button>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-border bg-card">
+            {events.data && events.data.length > 0 ? (
+              events.data.map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-center gap-3 border-b border-border px-4 py-2 text-xs last:border-0"
+                >
+                  <LevelDot level={e.level} />
+                  <span className="w-24 shrink-0 truncate font-mono text-muted-foreground">{e.type}</span>
+                  <span className="flex-1 truncate text-foreground">{e.message}</span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">{relativeDate(e.createdAt)}</span>
+                </div>
+              ))
+            ) : (
+              <div className="px-4 py-6 text-center text-xs text-muted-foreground">暂无事件</div>
+            )}
+          </div>
+        </section>
       </div>
-    </Page>
+    </>
   );
 }
 
-function Metric({
-  icon: Icon,
-  label,
-  value,
-  detail,
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string | number;
-  detail: string;
-}): ReactNode {
-  return (
-    <article className="metric-card">
-      <div className="metric-label">
-        <Icon size={16} strokeWidth={1.7} />
-        <span>{label}</span>
-      </div>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </article>
-  );
-}
-
-function Principle({
-  index,
-  title,
-  description,
-  action,
-}: {
-  index: string;
-  title: string;
-  description: string;
-  action: ReactNode;
-}): ReactNode {
-  return (
-    <article className="principle-card">
-      <span className="section-index">{index}</span>
-      <h2>{title}</h2>
-      <p>{description}</p>
-      {action}
-    </article>
-  );
+function LevelDot({ level }: { level: string }) {
+  const cls =
+    level === 'error'
+      ? 'bg-red-400'
+      : level === 'warn'
+        ? 'bg-amber-400'
+        : level === 'info'
+          ? 'bg-emerald-400'
+          : 'bg-zinc-500';
+  return <span className={`inline-block size-1.5 shrink-0 rounded-full ${cls}`} />;
 }

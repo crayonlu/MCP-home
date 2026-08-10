@@ -1,70 +1,57 @@
-import { ArrowRight, KeyRound, Waypoints } from 'lucide-react';
-import { useState, type FormEvent, type ReactNode } from 'react';
-import { login } from '../lib/api.js';
-import { Button } from './ui/Button.js';
+import { useState, type FormEvent } from 'react';
+import { Waypoints } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { login } from '@/lib/api';
 
-export function LoginScreen({ onSuccess }: { onSuccess(): void }): ReactNode {
+export function LoginScreen({ onSuccess }: { onSuccess(): void }) {
   const [key, setKey] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const submit = async (event: FormEvent): Promise<void> => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setError(null);
+    if (!key.trim()) return;
     setLoading(true);
     try {
-      await login(key);
-      setKey('');
+      await login(key.trim());
       onSuccess();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+    } catch {
+      toast.error('Control API Key 无效');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="login-layout">
-      <section className="login-context">
-        <div className="login-brand">
-          <Waypoints size={21} strokeWidth={1.7} />
-          <span>MCP Home</span>
+    <div className="flex min-h-screen w-screen items-center justify-center bg-background px-4">
+      <form
+        onSubmit={(e) => void submit(e)}
+        className="w-full max-w-sm space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm"
+      >
+        <div className="flex flex-col items-center gap-2 text-center">
+          <Waypoints className="size-7 text-foreground" strokeWidth={1.6} />
+          <h1 className="text-base font-semibold">MCP Home</h1>
+          <p className="text-xs text-muted-foreground">输入 Control API Key 进入控制台</p>
         </div>
-        <div>
-          <span className="eyebrow">Private control plane</span>
-          <h1>一个入口，安放你所有的 MCP。</h1>
-          <p>上游凭据留在 Home 内；Harness 只接触标准 MCP URL 与独立的 Access Key。</p>
+        <div className="space-y-1.5">
+          <Label htmlFor="key">Control API Key</Label>
+          <Input
+            id="key"
+            type="password"
+            autoComplete="current-password"
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            placeholder="mch_ctl_…"
+            autoFocus
+            required
+          />
         </div>
-        <small>Self-hosted · Single-user · Protocol-native</small>
-      </section>
-      <section className="login-panel">
-        <form className="login-form" onSubmit={(event) => void submit(event)}>
-          <span className="login-icon">
-            <KeyRound size={20} strokeWidth={1.7} />
-          </span>
-          <div>
-            <h2>进入控制台</h2>
-            <p>使用 Control API Key 建立短期管理会话。</p>
-          </div>
-          <label className="field">
-            <span>Control API Key</span>
-            <input
-              type="password"
-              value={key}
-              onChange={(event) => setKey(event.target.value)}
-              placeholder="mch_ctl_..."
-              autoComplete="current-password"
-              autoFocus
-              required
-            />
-          </label>
-          {error && <div className="inline-error">{error}</div>}
-          <Button type="submit" disabled={loading}>
-            <span>{loading ? '正在验证' : '进入 MCP Home'}</span>
-            <ArrowRight size={16} strokeWidth={1.8} />
-          </Button>
-        </form>
-      </section>
+        <Button type="submit" disabled={loading} className="w-full">
+          {loading ? '验证中…' : '登录'}
+        </Button>
+      </form>
     </div>
   );
 }

@@ -1,31 +1,32 @@
-import * as Toast from '@radix-ui/react-toast';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { AppShell } from './components/AppShell.js';
-import { LoginScreen } from './components/LoginScreen.js';
-import { Button } from './components/ui/Button.js';
-import { LoadingScreen } from './components/ui/LoadingScreen.js';
-import { ApiError, api, errorMessage, logout } from './lib/api.js';
-import { overviewSchema, type View } from './lib/contracts.js';
-import { CredentialsPage } from './pages/CredentialsPage.js';
-import { DiagnosticsPage } from './pages/DiagnosticsPage.js';
-import { KeysPage } from './pages/KeysPage.js';
-import { OverviewPage } from './pages/OverviewPage.js';
-import { ServersPage } from './pages/ServersPage.js';
+import { Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Toaster } from '@/components/ui/sonner';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { AppShell } from '@/components/layout/AppShell';
+import { LoginScreen } from '@/components/LoginScreen';
+import { Button } from '@/components/ui/button';
+import { ApiError, api, errorMessage, logout } from '@/lib/api';
+import { overviewSchema } from '@/lib/contracts';
+import { useHashRoute } from '@/lib/hooks';
+import { OverviewPage } from '@/pages/OverviewPage';
+import { ServersPage } from '@/pages/ServersPage';
+import { CredentialsPage } from '@/pages/CredentialsPage';
+import { KeysPage } from '@/pages/KeysPage';
+import { LogsPage } from '@/pages/LogsPage';
 
-export function App(): ReactNode {
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
-  const [view, setView] = useState<View>('overview');
-  const [toast, setToast] = useState<{ title: string; detail?: string } | null>(null);
+export function App() {
+  const [authed, setAuthed] = useState<boolean | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const [route, go] = useHashRoute();
 
   const checkSession = useCallback(async () => {
     setSessionError(null);
     try {
       await api('/api/v1/overview', overviewSchema);
-      setAuthenticated(true);
+      setAuthed(true);
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 401) {
-        setAuthenticated(false);
+        setAuthed(false);
       } else {
         setSessionError(errorMessage(cause));
       }
@@ -36,57 +37,48 @@ export function App(): ReactNode {
     void checkSession();
   }, [checkSession]);
 
-  const notify = useCallback((title: string, detail?: string) => {
-    setToast({ title, ...(detail === undefined ? {} : { detail }) });
-  }, []);
-
-  if (authenticated === null && sessionError) {
+  if (authed === null && sessionError) {
     return (
-      <div className="loading-screen connection-error" role="alert">
-        <strong>无法连接 MCP Home</strong>
-        <span>{sessionError}</span>
-        <Button variant="secondary" size="small" onClick={() => void checkSession()}>
-          重试连接
+      <div className="flex min-h-screen w-screen flex-col items-center justify-center gap-3 bg-background px-4 text-center">
+        <p className="text-sm font-medium text-foreground">无法连接 MCP Home</p>
+        <p className="max-w-md text-xs text-muted-foreground">{sessionError}</p>
+        <Button variant="outline" size="sm" onClick={() => void checkSession()}>
+          重试
         </Button>
       </div>
     );
   }
-  if (authenticated === null) return <LoadingScreen label="正在连接 MCP Home" />;
-  if (!authenticated) return <LoginScreen onSuccess={() => setAuthenticated(true)} />;
+
+  if (authed === null) {
+    return (
+      <div className="flex min-h-screen w-screen items-center justify-center bg-background">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!authed) return <LoginScreen onSuccess={() => setAuthed(true)} />;
 
   return (
-    <Toast.Provider swipeDirection="right" duration={4200}>
+    <TooltipProvider delayDuration={250}>
       <AppShell
-        view={view}
-        onViewChange={setView}
+        route={route}
+        onNavigate={go}
         onLogout={async () => {
           try {
             await logout();
-            setAuthenticated(false);
-          } catch (cause) {
-            notify('退出失败', errorMessage(cause));
+          } finally {
+            setAuthed(false);
           }
         }}
       >
-        {view === 'overview' && <OverviewPage onNavigate={setView} />}
-        {view === 'servers' && <ServersPage notify={notify} />}
-        {view === 'credentials' && <CredentialsPage notify={notify} />}
-        {view === 'keys' && <KeysPage notify={notify} />}
-        {view === 'diagnostics' && <DiagnosticsPage />}
+        {route === 'overview' && <OverviewPage onNavigate={go} />}
+        {route === 'servers' && <ServersPage />}
+        {route === 'credentials' && <CredentialsPage />}
+        {route === 'keys' && <KeysPage />}
+        {route === 'logs' && <LogsPage />}
       </AppShell>
-      <Toast.Root
-        className="toast"
-        open={toast !== null}
-        onOpenChange={(open) => {
-          if (!open) setToast(null);
-        }}
-      >
-        <Toast.Title className="toast-title">{toast?.title}</Toast.Title>
-        {toast?.detail && (
-          <Toast.Description className="toast-detail">{toast.detail}</Toast.Description>
-        )}
-      </Toast.Root>
-      <Toast.Viewport className="toast-viewport" />
-    </Toast.Provider>
+      <Toaster />
+    </TooltipProvider>
   );
 }
