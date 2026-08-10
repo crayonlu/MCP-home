@@ -4,7 +4,7 @@ services:
     init: true
     restart: unless-stopped
     ports:
-      - '3344:3344'
+      - '127.0.0.1:3344:3344'
     environment:
       MCP_HOME_HOST: 0.0.0.0
       MCP_HOME_PORT: 3344
