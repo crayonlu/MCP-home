@@ -9,7 +9,7 @@
 
 ## 2. 设计方向
 
-核心意象：一块安静的毛玻璃仪表盘——内容贴满屏幕边缘，没有卡片边框、没有硬分割线、没有圆角。层级靠**空间、透明度、毛玻璃景深、elevation** 表达，而非 1px 描边。
+核心意象：一块安静的毛玻璃仪表盘——内容居中收束（max-width 容器），没有卡片边框、没有硬分割线、没有圆角；间距紧凑、信息饱满，不做空洞的大片留白。层级靠**空间、透明度、毛玻璃景深、elevation** 表达，而非 1px 描边。
 
 参考气质：Linear / Vercel——黑白灰底 + 一个鲜艳强调色 + 全直角 + 几乎无边框。
 
@@ -42,13 +42,24 @@
 ## 3. 技术栈与架构
 
 - **React 19 + Vite + TypeScript + Tailwind CSS v4**（与前两版技术栈一致）
-- **自研设计系统**：视觉层 100% 自写；交互底层用 **Radix UI 无样式原语**（Dialog、DropdownMenu、Select、Switch、Tooltip、Tabs、Toast）
+- **自研设计系统**：视觉层 100% 自写；交互底层用 **Base UI**（`@base-ui/react`，headless 无样式原语：Dialog、Menu、Select、Switch、Tabs、Toast、Tooltip、Field）
 - **Motion**（Framer Motion 团队）做弹簧动画
 - **TanStack Query**：服务端数据缓存 + events/diagnostics 轮询
 - **react-router**：路由
 - **i18n**：`zh` / `en` 词典 + 切换器（默认跟随系统）
 
-### 3.1 目录结构
+### 3.1 布局原则
+
+- **居中**：主内容为居中 max-width 容器（`max-w-6xl`），列表/表格/表单共用同一居中列。
+- **紧凑密度**：基础 4px 步进，常规间隙 8–16px，区块间距 16–24px；表格行高 ~44px、卡片内边距 16px、侧边栏 200–220px；无大片留白。
+
+### 3.2 移动端（一等公民）
+
+- 底部 Tab 导航（概览/服务器/凭据/更多）+ 顶部毛玻璃栏
+- 触控目标 ≥44px；表格 <640px 转卡片流；模态/详情为底部抽屉
+- `env(safe-area-inset-*)` 适配；无横向滚动；`prefers-reduced-motion` 降级
+
+### 3.3 目录结构
 
 ```
 web/
@@ -115,3 +126,4 @@ web/
 
 - 不引入任何带样式的组件库；不复制旧版 web/ 代码（从零写设计系统）。
 - 功能面 = CLI 功能面 + 原始 API 控制台兜底，不简化、不新增与 CLI 无关的功能。
+- 代码规范：不写任何代码注释（含 JSDoc、行内注释）。
