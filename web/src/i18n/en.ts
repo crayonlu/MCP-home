@@ -6,6 +6,7 @@ export const en: Dict = {
   'nav.credentials': 'Credentials',
   'nav.accessKeys': 'Access Keys',
   'nav.endpoints': 'Endpoints',
+  'nav.market': 'Market',
   'nav.diagnostics': 'Diagnostics',
   'nav.events': 'Events',
   'nav.settings': 'Settings',

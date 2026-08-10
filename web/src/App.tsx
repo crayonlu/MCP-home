@@ -16,6 +16,7 @@ import { EndpointsPage } from './features/endpoints/EndpointsPage'
 import { DiagnosticsPage } from './features/diagnostics/DiagnosticsPage'
 import { EventsPage } from './features/events/EventsPage'
 import { SettingsPage } from './features/settings/SettingsPage'
+import { MarketPage } from './features/market/MarketPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -62,6 +63,7 @@ export function App() {
                   <Route path="/servers/:id" element={<ServerDetailPage />} />
                   <Route path="/credentials" element={<CredentialsPage />} />
                   <Route path="/access-keys" element={<AccessKeysPage />} />
+                  <Route path="/market" element={<MarketPage />} />
                   <Route path="/endpoints" element={<EndpointsPage />} />
                   <Route path="/diagnostics" element={<DiagnosticsPage />} />
                   <Route path="/events" element={<EventsPage />} />

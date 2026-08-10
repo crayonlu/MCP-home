@@ -6,6 +6,7 @@ export const zh: Dict = {
   'nav.credentials': '凭据',
   'nav.accessKeys': '访问密钥',
   'nav.endpoints': '端点',
+  'nav.market': '市场',
   'nav.diagnostics': '诊断',
   'nav.events': '事件',
   'nav.settings': '设置',

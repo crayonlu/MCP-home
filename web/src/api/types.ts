@@ -167,3 +167,32 @@ export interface CredentialTestResult {
   servers: { id: string; slug: string; ok: boolean; error?: string }[]
   error?: string
 }
+
+export interface MarketRequirement {
+  name: string
+  description: string
+  secret?: boolean
+  required?: boolean
+}
+
+export type CredentialSpec =
+  | { type: 'oauth' }
+  | { type: 'env' }
+  | { type: 'bearer'; tokenKey: string }
+  | { type: 'api-key'; headerName: string; valueKey: string }
+  | { type: 'headers'; headers: { name: string; valueKey?: string; value?: string }[] }
+
+export interface MarketEntry {
+  id: string
+  name: string
+  description: string
+  category: string
+  kind: 'home-stdio' | 'remote'
+  package?: string
+  bin?: string
+  url?: string
+  credential: CredentialSpec
+  requires: MarketRequirement[]
+  argsTemplate?: string[]
+  installed: boolean
+}

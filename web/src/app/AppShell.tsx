@@ -1,5 +1,6 @@
 import {
   Activity,
+  Boxes,
   Globe,
   KeyRound,
   LayoutDashboard,
@@ -33,6 +34,7 @@ const desktopNav: NavItem[] = [
   { to: '/credentials', key: 'nav.credentials', icon: KeyRound },
   { to: '/access-keys', key: 'nav.accessKeys', icon: Link2 },
   { to: '/endpoints', key: 'nav.endpoints', icon: Globe },
+  { to: '/market', key: 'nav.market', icon: Boxes },
   { to: '/diagnostics', key: 'nav.diagnostics', icon: Activity },
   { to: '/events', key: 'nav.events', icon: ScrollText },
   { to: '/settings', key: 'nav.settings', icon: Settings },
@@ -129,6 +131,7 @@ function pageKeyFor(path: string): string {
   if (path.startsWith('/servers')) return 'nav.servers'
   if (path.startsWith('/credentials')) return 'nav.credentials'
   if (path.startsWith('/access-keys')) return 'nav.accessKeys'
+  if (path.startsWith('/market')) return 'nav.market'
   if (path.startsWith('/endpoints')) return 'nav.endpoints'
   if (path.startsWith('/diagnostics')) return 'nav.diagnostics'
   if (path.startsWith('/events')) return 'nav.events'

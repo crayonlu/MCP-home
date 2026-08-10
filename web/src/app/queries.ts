@@ -9,6 +9,7 @@ import type {
   Diagnostics,
   EventRecord,
   EventLevel,
+  MarketEntry,
   Overview,
   ServerLogEntry,
   ServerRecord,
@@ -243,6 +244,38 @@ export function useRevokeControlKey() {
     mutationFn: ({ id }: { id: string }) => api.delete(`/api/v1/control-keys/${id}`),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ['control-keys'] })
+    },
+  })
+}
+
+export function useMarket() {
+  return useQuery({
+    queryKey: ['market'],
+    queryFn: () => api.get<MarketEntry[]>('/api/v1/market'),
+  })
+}
+
+export function useMarketInstall() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, values }: { id: string; values: Record<string, string> }) =>
+      api.post(`/api/v1/market/${id}/install`, { values }),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['market'] })
+      client.invalidateQueries({ queryKey: ['servers'] })
+      client.invalidateQueries({ queryKey: ['overview'] })
+    },
+  })
+}
+
+export function useMarketUninstall() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => api.post(`/api/v1/market/${id}/uninstall`),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['market'] })
+      client.invalidateQueries({ queryKey: ['servers'] })
+      client.invalidateQueries({ queryKey: ['overview'] })
     },
   })
 }
