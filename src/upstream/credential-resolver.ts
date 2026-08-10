@@ -13,10 +13,12 @@ export interface ResolvedCredential {
 export class CredentialResolver {
   readonly #store: Store;
   readonly #publicUrl: URL;
+  readonly #urlClientId: boolean;
 
-  constructor(store: Store, publicUrl: URL) {
+  constructor(store: Store, publicUrl: URL, urlClientId = true) {
     this.#store = store;
     this.#publicUrl = publicUrl;
+    this.#urlClientId = urlClientId;
   }
 
   resolve(server: ServerRecord): ResolvedCredential {
@@ -69,7 +71,9 @@ export class CredentialResolver {
         return {
           headers: {},
           env: {},
-          authProvider: new StoredOAuthProvider(this.#store, credentialId, this.#publicUrl),
+          authProvider: new StoredOAuthProvider(this.#store, credentialId, this.#publicUrl, {
+            urlClientId: this.#urlClientId,
+          }),
         };
     }
   }

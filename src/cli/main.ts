@@ -104,8 +104,7 @@ credential
   .option('--server-id <id>', 'associated remote MCP server')
   .option('--force', 'force a new authorization grant')
   .action(
-    run((client, id: string, command: Command) => {
-      const options = command.opts<{ serverId?: string; force?: boolean }>();
+    run((client, id: string, options: { serverId?: string; force?: boolean }) => {
       return client.request('POST', `/api/v1/credentials/${id}/authorize`, {
         ...(options.serverId === undefined ? {} : { serverId: options.serverId }),
         force: options.force ?? false,

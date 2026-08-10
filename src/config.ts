@@ -28,6 +28,7 @@ const envSchema = z
     MCP_HOME_BOOTSTRAP_CONTROL_KEY: z.string().min(32).optional(),
     MCP_HOME_ALLOWED_HOSTS: z.string().optional(),
     MCP_HOME_LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+    MCP_HOME_OAUTH_URL_CLIENT_ID: z.enum(['true', 'false']).default('true'),
   })
   .superRefine((value, context) => {
     if (value.MCP_HOME_BOOTSTRAP_CONTROL_KEY === value.MCP_HOME_MASTER_KEY) {
@@ -49,6 +50,7 @@ export interface RuntimeConfig {
   bootstrapControlKey?: string;
   allowedHosts: string[];
   logLevel: 'debug' | 'info' | 'warn' | 'error';
+  oauthUrlClientId: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
@@ -72,5 +74,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     ...(bootstrap === undefined ? {} : { bootstrapControlKey: bootstrap }),
     allowedHosts: configuredHosts.length === 0 ? [publicUrl.hostname] : configuredHosts,
     logLevel: parsed.MCP_HOME_LOG_LEVEL,
+    oauthUrlClientId: parsed.MCP_HOME_OAUTH_URL_CLIENT_ID === 'true',
   };
 }

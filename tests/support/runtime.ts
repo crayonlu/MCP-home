@@ -23,6 +23,7 @@ export function createTestRuntime(): TestRuntime {
     bootstrapControlKey: controlKey,
     allowedHosts: ['mcp-home.test'],
     logLevel: 'error',
+    oauthUrlClientId: true,
   });
   return {
     runtime,

@@ -21,23 +21,43 @@ export class UpstreamOAuthService {
   readonly #publicUrl: URL;
   readonly #upstreams: UpstreamManager;
   readonly #logger: Logger;
+  readonly #urlClientId: boolean;
 
-  constructor(store: Store, publicUrl: URL, upstreams: UpstreamManager, logger: Logger) {
+  constructor(
+    store: Store,
+    publicUrl: URL,
+    upstreams: UpstreamManager,
+    logger: Logger,
+    urlClientId = true,
+  ) {
     this.#store = store;
     this.#publicUrl = publicUrl;
     this.#upstreams = upstreams;
     this.#logger = logger;
+    this.#urlClientId = urlClientId;
+  }
+
+  #provider(credentialId: string) {
+    return new StoredOAuthProvider(this.#store, credentialId, this.#publicUrl, {
+      urlClientId: this.#urlClientId,
+    });
   }
 
   metadata(credentialId: string) {
-    return new StoredOAuthProvider(this.#store, credentialId, this.#publicUrl).clientMetadata;
+    return this.#provider(credentialId).clientMetadata;
   }
 
   async begin(credentialId: string, value: unknown = {}) {
     const input = beginInputSchema.parse(value);
     const server = this.#serverFor(credentialId, input.serverId);
-    const provider = new StoredOAuthProvider(this.#store, credentialId, this.#publicUrl);
+    const provider = this.#provider(credentialId);
     const payload = this.#oauthPayload(credentialId);
+    if (input.force) {
+      // A forced flow starts over: discard any previously registered client so
+      // the next authorization re-registers under the current configuration
+      // (e.g. DCR instead of URL-based client metadata).
+      provider.invalidateCredentials('client');
+    }
     const result = await auth(provider, {
       serverUrl: server.transport.url,
       ...(payload.scope === undefined ? {} : { scope: payload.scope }),
@@ -79,7 +99,7 @@ export class UpstreamOAuthService {
 
   async callback(credentialId: string, input: { code: string; state: string; iss?: string }) {
     const server = this.#serverFor(credentialId);
-    const provider = new StoredOAuthProvider(this.#store, credentialId, this.#publicUrl);
+    const provider = this.#provider(credentialId);
     provider.validateCallbackState(input.state);
     const payload = this.#oauthPayload(credentialId);
     const result = await auth(provider, {
@@ -109,7 +129,7 @@ export class UpstreamOAuthService {
 
   async revoke(credentialId: string) {
     const server = this.#serverFor(credentialId);
-    const provider = new StoredOAuthProvider(this.#store, credentialId, this.#publicUrl);
+    const provider = this.#provider(credentialId);
     const payload = this.#oauthPayload(credentialId);
     const metadata = payload.discoveryState?.authorizationServerMetadata;
     const endpointValue = metadata ? Reflect.get(metadata, 'revocation_endpoint') : undefined;

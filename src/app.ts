@@ -38,9 +38,15 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
   auth.ensureBootstrapControlKey(config.bootstrapControlKey);
   const oauth = new OAuthServer(config.publicUrl, config.masterKey, auth);
   const sessions = new ControlSessionService(config.masterKey);
-  const credentials = new CredentialResolver(store, config.publicUrl);
+  const credentials = new CredentialResolver(store, config.publicUrl, config.oauthUrlClientId);
   const upstreams = new UpstreamManager(store, credentials, logger);
-  const upstreamOAuth = new UpstreamOAuthService(store, config.publicUrl, upstreams, logger);
+  const upstreamOAuth = new UpstreamOAuthService(
+    store,
+    config.publicUrl,
+    upstreams,
+    logger,
+    config.oauthUrlClientId,
+  );
   const registry = new CapabilityRegistry(store);
   const cursors = new CursorCodec(config.masterKey);
   const gatewayFactory = new GatewayServerFactory(registry, upstreams, cursors, config.masterKey);

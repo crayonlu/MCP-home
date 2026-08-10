@@ -13,17 +13,33 @@ import type { Store } from '../storage/store.js';
 
 const FLOW_TTL_MS = 10 * 60 * 1_000;
 
+export interface StoredOAuthProviderOptions {
+  /**
+   * Whether to advertise URL-based client metadata (RFC 9728
+   * `client_id_metadata_document_supported`) to upstream authorization
+   * servers. When disabled, dynamic client registration is used instead.
+   * Some providers (e.g. Cloudflare's hosted MCP) fail to fetch metadata
+   * documents from proxied origins, so DCR is the reliable fallback.
+   */
+  urlClientId?: boolean;
+}
+
 export class StoredOAuthProvider implements OAuthClientProvider {
   readonly clientMetadataUrl?: string;
   readonly #store: Store;
   readonly #credentialId: string;
   readonly #publicUrl: URL;
 
-  constructor(store: Store, credentialId: string, publicUrl: URL) {
+  constructor(
+    store: Store,
+    credentialId: string,
+    publicUrl: URL,
+    options: StoredOAuthProviderOptions = {},
+  ) {
     this.#store = store;
     this.#credentialId = credentialId;
     this.#publicUrl = publicUrl;
-    if (publicUrl.protocol === 'https:') {
+    if (publicUrl.protocol === 'https:' && (options.urlClientId ?? true)) {
       this.clientMetadataUrl = new URL(
         `/oauth/upstream/client/${credentialId}`,
         publicUrl,
@@ -49,6 +65,31 @@ export class StoredOAuthProvider implements OAuthClientProvider {
       software_version: '0.1.0',
       ...(payload.scope === undefined ? {} : { scope: payload.scope }),
     };
+  }
+
+  async validateResourceURL(serverUrl: string | URL, resource?: string): Promise<URL | undefined> {
+    // The SDK discovers protected-resource metadata from the path-scoped
+    // well-known document, which some providers (e.g. Notion) publish with a
+    // different resource identifier than their authorization server accepts.
+    // Prefer the origin's well-known declaration when it is available, and
+    // fall back to the SDK-discovered value otherwise.
+    try {
+      const origin = new URL('/', serverUrl);
+      const response = await fetch(new URL('/.well-known/oauth-protected-resource', origin), {
+        headers: { Accept: 'application/json' },
+        redirect: 'follow',
+      });
+      if (response.ok) {
+        const body = (await response.json()) as { resource?: unknown };
+        if (typeof body.resource === 'string' && body.resource.length > 0) {
+          return new URL(body.resource);
+        }
+      }
+    } catch {
+      // Fall through to the SDK-discovered resource.
+    }
+    if (resource !== undefined) return new URL(resource);
+    return new URL(serverUrl);
   }
 
   async state(): Promise<string> {
@@ -168,7 +209,11 @@ export class StoredOAuthProvider implements OAuthClientProvider {
 
   invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery'): void {
     if (scope === 'all' || scope === 'client') {
-      this.#update({ clientInformation: undefined });
+      this.#update({
+        clientInformation: undefined,
+        clientId: undefined,
+        clientSecret: undefined,
+      });
     }
     if (scope === 'all' || scope === 'tokens') {
       this.#update({
