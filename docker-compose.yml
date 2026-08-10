@@ -1,5 +1,6 @@
 services:
   mcp-home:
+    image: ghcr.io/crayonlu/mcp-home:latest
     build: .
     init: true
     restart: unless-stopped

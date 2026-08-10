@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { marketCatalog, type MarketEntry } from './catalog.js'
@@ -28,9 +28,10 @@ export class MarketService {
   }
 
   list() {
+    const servers = this.#service.listServers();
     return marketCatalog.map((entry) => ({
       ...entry,
-      installed: this.#isInstalled(entry),
+      installed: servers.some((server) => server.slug === entry.id),
     }));
   }
 
@@ -42,7 +43,7 @@ export class MarketService {
 
   async install(id: string, values: Record<string, string> = {}) {
     const entry = this.#entry(id);
-    if (this.#isInstalled(entry)) {
+    if (this.#service.listServers().some((server) => server.slug === entry.id)) {
       throw new AppError('market_installed', `Market entry "${id}" is already installed`, 409);
     }
     for (const requirement of entry.requires) {
@@ -136,13 +137,6 @@ export class MarketService {
     const entry = marketCatalog.find((item) => item.id === id);
     if (!entry) throw new AppError('market_not_found', `Market entry "${id}" not found`, 404);
     return entry;
-  }
-
-  #isInstalled(entry: MarketEntry): boolean {
-    if (entry.kind === 'remote') {
-      return this.#service.listServers().some((server) => server.slug === entry.id);
-    }
-    return existsSync(this.#binPath(entry));
   }
 
   #binPath(entry: MarketEntry): string {
