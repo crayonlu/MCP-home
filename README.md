@@ -1,55 +1,73 @@
 # MCP Home
 
-MCP Home 是一个单用户、可自托管的 Remote MCP 控制面与协议网关。你在一个地方管理上游 MCP Server 和凭据，再把稳定的标准 MCP URL 配置给任意 Harness。
+MCP Home is a single-user, self-hosted Remote MCP control plane and protocol gateway. Manage your upstream MCP servers and credentials in one place, then point any harness at stable, standard MCP URLs.
 
-它同时暴露两种数据面入口：
+It exposes two data-plane entry points:
 
-- `POST /mcp`：聚合所有已启用 Server，名称和 URI 自动命名空间化。
-- `POST /mcp/{server_slug}`：单个 Server 的独立入口，保留原始名称、URI 和扩展语义。
+- `POST /mcp`: aggregates all enabled servers, namespacing tool names and URIs automatically.
+- `POST /mcp/{server_slug}`: a per-server entry point that preserves original names, URIs, and extension semantics.
 
-MCP Home 不为 Claude Code、Codex、Cursor 或其他 Harness 编写专属适配层。Harness 只需支持标准 Streamable HTTP MCP 与 Bearer 鉴权。
+MCP Home does not write harness-specific adapters for Claude Code, Codex, Cursor, or anything else. Any harness that speaks standard Streamable HTTP MCP with Bearer auth works.
 
-## 项目边界
+## Web Console
 
-MCP Home 管理两类 MCP：
+The web console mirrors the full CLI surface: server and credential management, OAuth authorization, one-click Market installs, diagnostics, events, config export/import — with Chinese/English UI and mobile support.
 
-- Remote-native：上游本身提供 Streamable HTTP，可位于公网、内网或其他服务器。
-- Home-hosted：由 MCP Home 所在机器启动并托管的 stdio MCP，再通过远程入口提供给 Harness。
+![Dashboard](docs/screenshots/dashboard.png)
 
-必须运行在 Harness 所在本机、依赖该机器浏览器或桌面状态的 MCP 不属于本项目。例如 Harness 笔记本上的 Chrome DevTools MCP 应继续由该 Harness 本地配置。若它运行在 MCP Home 宿主机上，则可以作为 Home-hosted Server 管理，但它访问的是宿主机环境。
+![Servers](docs/screenshots/servers.png)
 
-首版明确不包含多租户、Profile、Workspace 或 Project 管理。
+![Credentials](docs/screenshots/credentials.png)
 
-## 协议能力
+![Market](docs/screenshots/market.png)
 
-独立入口以无损代理为目标，聚合入口在保持可路由性的前提下虚拟化冲突名称：
+![Settings](docs/screenshots/settings.png)
 
-- Tools、Prompts、Resources、Resource Templates、Completion
-- Resource subscriptions 与 list-changed 通知
-- Sampling、Roots、Elicitation 与 2026 MRTR `input_required`
-- 最终 Tasks 扩展：`tasks/get`、`tasks/update`、`tasks/cancel`、任务 ID 虚拟化和 `Mcp-Name` 绑定
-- MCP Apps，聚合入口保留 `ui://` URI；独立入口保持原始 App 语义
-- Logging、Progress、取消与自定义扩展方法
-- 2026-07-28 与 2025-era 自动协商，远程 SSE 可显式作为回退
+Mobile:
 
-下游 2026 请求保持无状态；2025-era 使用与认证 principal 绑定的持久 Session，保留 initialize 能力声明和双向请求语义。最终 Tasks extension 在 SDK 2.0 尚未注册的部分由隔离兼容层补齐，对外仍是官方 `tasks/*` wire contract。
+![Market mobile](docs/screenshots/market-mobile.png) ![Dashboard mobile](docs/screenshots/dashboard-mobile.png)
 
-聚合工具名为 `{server_slug}.{upstream_name}`。未知扩展方法在聚合入口使用 `mcp-home/{server_slug}/{upstream_method}`；独立入口原样透传。MCP App 若使用原始工具名，MCP Home 会根据 App 资源上下文或全局唯一名称路由；存在同名歧义时应使用独立入口。
+## Project Scope
 
-当现代 Harness 调用旧式上游时，MCP Home 会把 Tool、Prompt 和 Resource Read 中的 push-style Elicitation、Sampling、Roots 暂停并转换成现代 `input_required` 多轮交互，再恢复同一个上游请求。旧式自定义扩展若在自定义 method 内主动发起私有 server-to-client request，则没有可映射到现代 MRTR 封闭类型集的标准表示；这类扩展应使用 legacy Harness 或升级上游协议。
+MCP Home manages two kinds of MCPs:
 
-更多细节见 [架构说明](docs/architecture.md) 和 [协议兼容说明](docs/protocol-compatibility.md)。
+- **Remote-native**: upstreams that already speak Streamable HTTP, hosted on the public internet, a private network, or another server.
+- **Home-hosted**: stdio MCPs spawned on the MCP Home host and exposed remotely to harnesses.
 
-## 快速开始
+MCPs that must run on the harness machine and depend on its browser or desktop state are out of scope. For example, a Chrome DevTools MCP on a harness laptop should stay configured locally on that harness. If it runs on the MCP Home host, it can be managed as a Home-hosted Server — but it operates on the host environment.
 
-需要 Node.js 24 或更新版本。
+The first release explicitly excludes multi-tenancy, profiles, workspaces, and project management.
+
+## Protocol Capabilities
+
+The per-server entry proxies losslessly; the aggregate virtualizes conflicting names while keeping everything routable:
+
+- Tools, Prompts, Resources, Resource Templates, Completion
+- Resource subscriptions and list-changed notifications
+- Sampling, Roots, Elicitation, and 2026 MRTR `input_required`
+- Final Tasks extension: `tasks/get`, `tasks/update`, `tasks/cancel`, task-ID virtualization, and `Mcp-Name` binding
+- MCP Apps: `ui://` URIs are preserved on the aggregate; original App semantics on per-server entries
+- Logging, Progress, cancellation, and custom extension methods
+- Automatic 2026-07-28 / 2025-era negotiation, with remote SSE available as an explicit fallback
+
+Downstream 2026 requests stay stateless; 2025-era clients use a persistent session bound to the authenticated principal, preserving initialize capability declarations and bidirectional request semantics. Parts of the Final Tasks extension not yet registered by SDK 2.0 are filled in by an isolated compatibility layer that still speaks the official `tasks/*` wire contract.
+
+Aggregated tool names are `{server_slug}.{upstream_name}`. Unknown extension methods use `mcp-home/{server_slug}/{upstream_method}` on the aggregate and pass through untouched on per-server entries. MCP Apps that use original tool names are routed by App resource context or globally unique names; use a per-server entry when names collide.
+
+When a modern harness calls a legacy upstream, MCP Home suspends push-style Elicitation, Sampling, and Roots in Tool, Prompt, and Resource Read calls, converts them to modern `input_required` multi-turn interactions, then resumes the same upstream request. Legacy extensions that issue private server-to-client requests inside a custom method have no standard representation in the closed MRTR type set; use a legacy harness or upgrade the upstream protocol for those.
+
+See [architecture](docs/architecture.md) and [protocol compatibility](docs/protocol-compatibility.md) for details.
+
+## Quick Start
+
+Requires Node.js 24 or newer.
 
 ```bash
 npm install
 cp .env.example .env
 ```
 
-生成两个独立随机值，分别填写 `MCP_HOME_MASTER_KEY` 和首次启动所需的 `MCP_HOME_BOOTSTRAP_CONTROL_KEY`。二者都至少 32 个字符，且不能相同。
+Generate two independent random values for `MCP_HOME_MASTER_KEY` and the first-boot `MCP_HOME_BOOTSTRAP_CONTROL_KEY`. Both must be at least 32 characters and must differ.
 
 ```bash
 npm run build
@@ -59,16 +77,16 @@ set +a
 npm start
 ```
 
-打开 `MCP_HOME_PUBLIC_URL`，使用 bootstrap Control API Key 登录。创建新的 Control Key 后，可以撤销 bootstrap key。
+Open `MCP_HOME_PUBLIC_URL` and sign in to the web console with the bootstrap Control API Key. Once you create a new Control Key, you can revoke the bootstrap key.
 
-开发模式分别运行：
+For development, run the server and web separately:
 
 ```bash
 npm run dev
 npm run dev:web
 ```
 
-Vite 会把 `/api` 请求代理到 `http://127.0.0.1:3344`。
+Vite proxies `/api` requests to `http://127.0.0.1:3344`.
 
 ## Docker
 
@@ -80,13 +98,27 @@ export MCP_HOME_ALLOWED_HOSTS="mcp.example.com"
 docker compose up -d --build
 ```
 
-生产环境应在 MCP Home 前放置 HTTPS 反向代理。OAuth 回调、URL-based Client ID 和远程 Harness 接入都应使用稳定的 HTTPS `MCP_HOME_PUBLIC_URL`。该值必须是规范 origin，不能包含路径、查询、fragment 或用户名密码。数据保存在 `/data/mcp-home.sqlite`，SQLite 使用 WAL 模式。
+Put an HTTPS reverse proxy in front of MCP Home in production. OAuth callbacks, URL-based Client IDs, and remote harness connections should all use a stable HTTPS `MCP_HOME_PUBLIC_URL`. The value must be a canonical origin — no path, query, fragment, username, or password. Data lives in `/data/mcp-home.sqlite` (SQLite, WAL mode).
 
-Home-hosted stdio Server 需要其命令存在于容器中。请基于本项目镜像安装对应运行时或二进制，并按需挂载工作目录；不要让 MCP Home 容器直接挂载 Docker socket。
+npm packages for Home-hosted stdio servers are installed by the **Market** into the data volume (`MCP_HOME_MARKET_DIR`, default `<dataDir>/market`) — no Dockerfile changes needed. Don't run arbitrary npm packages in the container: use the Market's curated catalog instead.
 
-## Harness 接入
+## Market
 
-先在控制台或 CLI 创建 MCP Access API Key。聚合入口的通用配置等价于：
+The Market ships a curated catalog of common MCP servers and installs them with one command, creating the Credential and Server for you:
+
+```bash
+npm run cli -- market list
+npm run cli -- market install resend --set RESEND_API_KEY=re_xxx
+npm run cli -- market uninstall resend
+```
+
+- Entries are either `remote` (official Streamable HTTP endpoints, OAuth or API key) or `home-stdio` (npm packages installed into the Market directory).
+- Installing a `home-stdio` entry runs `npm install --prefix <marketDir>` and creates an env Credential plus the matching Server.
+- The web console's Market page offers the same flow graphically; OAuth entries need the authorization flow after install.
+
+## Connecting a Harness
+
+First create an MCP Access API Key from the console or CLI. The generic aggregate configuration is:
 
 ```json
 {
@@ -97,7 +129,7 @@ Home-hosted stdio Server 需要其命令存在于容器中。请基于本项目�
 }
 ```
 
-只接入 GitHub Server 时使用：
+For a single GitHub server only:
 
 ```json
 {
@@ -108,30 +140,32 @@ Home-hosted stdio Server 需要其命令存在于容器中。请基于本项目�
 }
 ```
 
-Access Key 只能调用 MCP 数据面，不能读取 Server 或 Credential 配置。Control Key 只能调用控制面，不能作为 MCP 身份使用。
+Access Keys only call the MCP data plane; they cannot read server or credential configuration. Control Keys only call the control plane and cannot be used as an MCP identity.
 
-MCP Home 的数据面也实现 OAuth 2.1：Harness 可通过 RFC 9728 元数据发现授权服务器，使用 Authorization Code + PKCE 获取只绑定到具体 MCP endpoint 的 access token。
+The data plane also implements OAuth 2.1: a harness can discover the authorization server via RFC 9728 metadata and use Authorization Code + PKCE to obtain an access token bound to a specific MCP endpoint.
 
-下游 Dynamic Client Registration 返回由主密钥签名的无状态 Client ID，不依赖进程内注册表；使用同一主密钥重启后仍然有效。同时支持 HTTPS URL-based Client Metadata，并限制响应大小、重定向和非公网目标。
+Downstream Dynamic Client Registration returns a stateless Client ID signed with the master key — no in-process registry, valid across restarts with the same key. HTTPS URL-based Client Metadata is also supported, with limits on response size, redirects, and non-public targets.
 
-## 上游鉴权
+## Upstream Authentication
 
-Remote-native Server 支持：
+Remote-native servers support:
 
 - Bearer token
 - API key header
-- 多个自定义 headers
+- Multiple custom headers
 - OAuth 2.1 / OIDC
 
-OAuth/OIDC 使用 MCP TypeScript SDK 的官方认证编排器，覆盖 RFC 9728 发现、Authorization Server/OIDC metadata、PKCE、RFC 9207 issuer 校验、CIMD、DCR、刷新和 RFC 8707 resource indicator。OAuth Credential 与一个 Remote Server 一对一绑定，避免 token 跨 resource 或 issuer 复用。
+OAuth/OIDC uses the official MCP TypeScript SDK auth orchestrator, covering RFC 9728 discovery, Authorization Server/OIDC metadata, PKCE, RFC 9207 issuer validation, CIMD, DCR, refresh, and RFC 8707 resource indicators. An OAuth Credential is bound 1:1 to a Remote Server, preventing token reuse across resources or issuers.
 
-Home-hosted Server 使用 Environment Credential 或 transport 自身的 `env`。
+> If an upstream authorization server advertises URL-based Client Metadata support but cannot fetch it from a proxied origin (for example Cloudflare-hosted MCP), set `MCP_HOME_OAUTH_URL_CLIENT_ID=false` to force Dynamic Client Registration.
 
-Secret 应放入 Credential，而不是 Remote URL query 或 stdio arguments；后两者属于结构配置，无法可靠判断哪些片段需要脱敏。
+Home-hosted servers use an Environment Credential or the transport's own `env`.
+
+Put secrets in Credentials, not in Remote URL query strings or stdio arguments — the latter are structural configuration and cannot be reliably redacted.
 
 ## CLI
 
-构建后可以运行 `mcp-home`；源码开发时使用 `npm run cli --`。
+After building, run `mcp-home`; from source, use `npm run cli --`.
 
 ```bash
 npm run cli -- auth login \
@@ -146,60 +180,63 @@ npm run cli -- endpoint aggregate
 npm run cli -- doctor
 ```
 
-`credential authorize <name>` 按凭据名（或 id）解析，自动在浏览器打开授权链接并保持等待，直到授权成功、失败或超时：
+`credential authorize <name>` resolves by credential name (or id), opens the browser, and waits until authorization succeeds, fails, or times out:
 
 ```bash
-npm run cli -- credential authorize notion --server notion   # 指定 server（可省略，自动解析）
-npm run cli -- credential authorize notion --force            # 清掉旧 client 重新授权
-npm run cli -- credential authorize notion --no-open          # 不自动打开浏览器
-npm run cli -- credential authorize notion --no-wait          # 只打印链接，不等待
-npm run cli -- credential authorize notion --timeout 300      # 等待时长（秒，默认 600）
+npm run cli -- credential authorize notion --server notion   # explicit server (auto-resolved if omitted)
+npm run cli -- credential authorize notion --force            # clear the old client and re-authorize
+npm run cli -- credential authorize notion --no-open          # don't open the browser
+npm run cli -- credential authorize notion --no-wait          # print the URL and exit
+npm run cli -- credential authorize notion --timeout 300      # wait time in seconds (default 600)
 ```
 
-CLI 为每项 Control API 能力提供命令，并保留通用入口：
+The CLI exposes a command for every Control API capability plus a general escape hatch:
 
 ```bash
 npm run cli -- api GET /api/v1/openapi.json
 ```
 
-默认导出只包含可审阅的脱敏配置，不能用于恢复；Credential payload、静态 HTTP Header 值和 stdio transport env 值都会被隐藏。显式包含 Secret 时，CLI 以 `0600` 权限写文件；导入会在一个 SQLite 事务中重建 Credential、重新映射关联 ID，并在任一步失败时整体回滚。
+Config export is redacted and reviewable by default, and cannot be used to restore. Credential payloads, static HTTP header values, and stdio transport env values are hidden. When secrets are explicitly included, the CLI writes the file with `0600` permissions; import rebuilds credentials, remaps related IDs, and rolls back atomically in a single SQLite transaction if any step fails.
 
 ```bash
 npm run cli -- config export backup.json --include-secrets
 npm run cli -- config import backup.json
 ```
 
-备份文件包含明文 Secret，应使用与主密钥同等级别的保护。为避免 Secret 意外进入终端日志，`--include-secrets` 必须同时提供目标文件；CLI 会在写入后强制设置 `0600`。日常审阅可省略 `--include-secrets`。
+Backups contain plaintext secrets and deserve the same protection as the master key. `--include-secrets` requires an explicit output file to avoid leaking secrets into terminal logs, and the CLI forces `0600` after writing. Omit it for routine review.
 
-## 配置
+## Configuration
 
-| 环境变量                         | 说明                                              | 默认值                  |
-| -------------------------------- | ------------------------------------------------- | ----------------------- |
-| `MCP_HOME_HOST`                  | 监听地址                                          | `127.0.0.1`             |
-| `MCP_HOME_PORT`                  | 监听端口                                          | `3344`                  |
-| `MCP_HOME_PUBLIC_URL`            | 外部可访问的规范 origin，不含 path/query/fragment | `http://127.0.0.1:3344` |
-| `MCP_HOME_DATA_DIR`              | SQLite 与运行数据目录                             | `./data`                |
-| `MCP_HOME_MASTER_KEY`            | Secret 加密、签名与摘要根密钥，至少 32 字符       | 必填                    |
-| `MCP_HOME_BOOTSTRAP_CONTROL_KEY` | 数据库首次启动时写入的 Control Key                | 首次必填                |
-| `MCP_HOME_ALLOWED_HOSTS`         | 允许的 Host，逗号分隔                             | Public URL hostname     |
-| `MCP_HOME_LOG_LEVEL`             | `debug`、`info`、`warn`、`error`                  | `info`                  |
+| Environment variable            | Description                                       | Default                  |
+| ------------------------------- | ------------------------------------------------- | ------------------------ |
+| `MCP_HOME_HOST`                 | Listen address                                    | `127.0.0.1`              |
+| `MCP_HOME_PORT`                 | Listen port                                       | `3344`                   |
+| `MCP_HOME_PUBLIC_URL`           | Externally reachable canonical origin             | `http://127.0.0.1:3344`  |
+| `MCP_HOME_DATA_DIR`             | SQLite and runtime data directory                 | `./data`                 |
+| `MCP_HOME_MASTER_KEY`           | Root key for secret encryption/signing/digests    | required                 |
+| `MCP_HOME_BOOTSTRAP_CONTROL_KEY`| Control Key written on first database boot        | required on first boot   |
+| `MCP_HOME_ALLOWED_HOSTS`        | Allowed Hosts, comma-separated                    | Public URL hostname      |
+| `MCP_HOME_LOG_LEVEL`            | `debug`, `info`, `warn`, `error`                  | `info`                   |
+| `MCP_HOME_WEB_DIR`              | Web console static files directory                | disabled                 |
+| `MCP_HOME_MARKET_DIR`           | Market npm install directory                      | `<dataDir>/market`       |
+| `MCP_HOME_OAUTH_URL_CLIENT_ID`  | Enable URL-based Client Metadata                  | `true`                   |
 
-## 安全模型
+## Security Model
 
-- 上游 Secret 使用 AES-256-GCM 加密后写入 SQLite。
-- 数据库保存加密的主密钥校验标记；误用不同主密钥时启动会立即失败，避免静默锁死现有 API Key。
-- API Key 只保存 HMAC 摘要，完整 Secret 仅创建时返回。
-- Control 与 MCP Access Key 使用不同前缀和验证域。
-- Web 控制台把 Control Key 换成短期、HttpOnly、SameSite=Strict session cookie。
-- 下游 OAuth token 具有精确 endpoint audience；聚合 token 不能调用独立 endpoint，反之亦然。
-- OAuth callback 校验 state、PKCE、issuer 与发现状态。
-- URL-based client metadata 会拒绝私网和非安全目标，并固定使用已校验的公网解析地址发起 HTTPS 请求，降低 SSRF 与 DNS rebinding 风险。
-- 下游 DCR Client ID 使用主密钥签名，可跨进程重启验证且不在数据库保存 Client Secret。
-- 诊断事件保留最近约 10,000 条；Home-hosted stderr 进入事件流前会按 transport env 与 Environment Credential 值脱敏。
+- Upstream secrets are AES-256-GCM encrypted before being written to SQLite.
+- The database stores an encrypted master-key check; booting with the wrong master key fails immediately instead of silently locking existing API keys.
+- API Keys are stored only as HMAC digests; the full secret is returned once at creation.
+- Control and MCP Access Keys use distinct prefixes and validation domains.
+- The web console exchanges the Control Key for a short-lived, HttpOnly, SameSite=Strict session cookie.
+- Downstream OAuth tokens have exact endpoint audiences; an aggregate token cannot call per-server endpoints and vice versa.
+- OAuth callbacks validate state, PKCE, issuer, and discovery state.
+- URL-based client metadata rejects private-network and insecure targets and pins validated public-resolved addresses for HTTPS fetches, reducing SSRF and DNS-rebinding risk.
+- Downstream DCR Client IDs are signed with the master key, verifiable across restarts, and never stored in the database.
+- Diagnostic events keep the last ~10,000 entries; Home-hosted stderr is redacted against transport env and Environment Credential values before entering the event stream.
 
-请备份数据库与 `MCP_HOME_MASTER_KEY`，或保存一份受严格保护的 `--include-secrets` 配置导出。丢失主密钥后，原数据库中的加密 Credential 无法恢复。
+Back up the database and `MCP_HOME_MASTER_KEY`, or keep a tightly protected `--include-secrets` config export. Losing the master key makes encrypted credentials in the original database unrecoverable.
 
-## 工程命令
+## Engineering Commands
 
 ```bash
 npm run check
@@ -209,9 +246,9 @@ npm run test
 npm run test:real
 ```
 
-`npm run test:real` 优先启动构建后的真实 MCP Home 进程，并连接 Home-hosted stdio 与 Remote-native HTTP fixture。它使用官方 MCP Client 验证聚合/独立入口、modern/legacy Harness、Progress、取消、list-changed、MRTR、Tasks 和鉴权边界；没有构建产物时回退到源码入口，便于本地诊断。
+`npm run test:real` prefers to launch the built MCP Home process and connects Home-hosted stdio and Remote-native HTTP fixtures. It uses the official MCP Client to verify aggregate/per-server entries, modern/legacy harnesses, Progress, cancellation, list-changed, MRTR, Tasks, and auth boundaries; it falls back to source entry points when no build artifact exists, which is handy for local debugging.
 
-`/healthz` 只表示进程存活；`/readyz` 在运行状态不可用时返回 `503`。
+`/healthz` reports process liveness only; `/readyz` returns `503` while runtime state is unavailable.
 
 ## License
 
