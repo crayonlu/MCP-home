@@ -326,6 +326,9 @@ export class ControlService {
   overview() {
     const servers = this.#store.listServers();
     const states = servers.map((server) => this.#store.getRuntimeState(server.id));
+    const unhealthy = states.filter(
+      (state) => state && !['ready', 'disabled', 'unknown'].includes(state.status),
+    ).length;
     return {
       servers: {
         total: servers.length,
@@ -333,13 +336,20 @@ export class ControlService {
         remote: servers.filter((server) => server.kind === 'remote').length,
         home: servers.filter((server) => server.kind === 'home').length,
         ready: states.filter((state) => state?.status === 'ready').length,
-        unhealthy: states.filter(
-          (state) => state && !['ready', 'disabled', 'unknown'].includes(state.status),
-        ).length,
+        unhealthy,
       },
       credentials: this.#store.listCredentials().length,
+      accessKeys: this.#store.listApiKeys('access').length,
+      controlKeys: this.#store.listApiKeys('control').length,
+      ok: unhealthy === 0,
       endpoints: {
         aggregate: new URL('/mcp', this.#publicUrl).toString(),
+        individual: Object.fromEntries(
+          servers.map((server) => [
+            server.slug,
+            new URL(`/mcp/${server.slug}`, this.#publicUrl).toString(),
+          ]),
+        ),
       },
     };
   }
