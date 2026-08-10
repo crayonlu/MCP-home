@@ -9,6 +9,12 @@ export interface MenuAction {
   disabled?: boolean
 }
 
+function itemClass(action: MenuAction) {
+  return `flex h-9 cursor-pointer select-none items-center px-3 text-sm data-[highlighted]:bg-surface-2 ${
+    action.danger ? 'text-danger' : 'text-ink-2 data-[highlighted]:text-ink'
+  } data-[disabled]:opacity-40`
+}
+
 export function ActionsMenu({ actions }: { actions: MenuAction[] }) {
   return (
     <Menu.Root>
@@ -25,10 +31,9 @@ export function ActionsMenu({ actions }: { actions: MenuAction[] }) {
               <Menu.Item
                 key={action.label}
                 disabled={action.disabled}
-                onSelect={action.onSelect}
-                className={`flex h-9 cursor-pointer select-none items-center px-3 text-sm data-[highlighted]:bg-surface-2 ${
-                  action.danger ? 'text-danger' : 'text-ink-2 data-[highlighted]:text-ink'
-                } data-[disabled]:opacity-40`}
+                closeOnClick
+                onClick={action.onSelect}
+                className={itemClass(action)}
               >
                 {action.label}
               </Menu.Item>
@@ -59,10 +64,9 @@ export function ButtonMenu({
               <Menu.Item
                 key={action.label}
                 disabled={action.disabled}
-                onSelect={action.onSelect}
-                className={`flex h-9 cursor-pointer select-none items-center px-3 text-sm data-[highlighted]:bg-surface-2 ${
-                  action.danger ? 'text-danger' : 'text-ink-2 data-[highlighted]:text-ink'
-                } data-[disabled]:opacity-40`}
+                closeOnClick
+                onClick={action.onSelect}
+                className={itemClass(action)}
               >
                 {action.label}
               </Menu.Item>

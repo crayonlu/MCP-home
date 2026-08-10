@@ -34,11 +34,11 @@ describe('market', () => {
   it('installs and uninstalls a remote bearer entry', async () => {
     const { runtime, controlKey, close } = createTestRuntime();
     try {
-      const result = await jsonResponse(
+      const result = (await jsonResponse(
         await controlRequest(runtime, controlKey, 'POST', '/api/v1/market/context7/install', {
           values: { CONTEXT7_API_KEY: 'ctx-test' },
         }),
-      );
+      )) as { server: unknown; credential: unknown };
       const server = serverRecordSchema.parse(result.server);
       const credential = credentialRecordSchema.parse(result.credential);
       expect(server.slug).toBe('context7');
@@ -62,9 +62,9 @@ describe('market', () => {
   it('installs a remote oauth entry with an empty credential', async () => {
     const { runtime, controlKey, close } = createTestRuntime();
     try {
-      const result = await jsonResponse(
+      const result = (await jsonResponse(
         await controlRequest(runtime, controlKey, 'POST', '/api/v1/market/deepwiki/install', {}),
-      );
+      )) as { server: unknown; credential: unknown };
       const credential = credentialRecordSchema.parse(result.credential);
       expect(credential.type).toBe('oauth');
       expect(credential.status).toBe('pending');

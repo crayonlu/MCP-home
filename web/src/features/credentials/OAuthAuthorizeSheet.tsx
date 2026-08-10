@@ -23,32 +23,23 @@ export function OAuthAuthorizeSheet({
   const authorize = useAuthorizeCredential()
   const { data: credential } = useCredential(open ? credentialId : '')
   const [result, setResult] = useState<AuthorizeResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [elapsed, setElapsed] = useState(0)
+  const startedRef = useRef(false)
   const pollRef = useRef<number | null>(null)
 
-  const start = (force: boolean) => {
-    setResult(null)
-    setElapsed(0)
-    authorize.mutate(
-      { id: credentialId, force },
-      {
-        onSuccess: (data) => {
-          setResult(data)
-          if (data.status === 'authorization-required' && data.authorizationUrl) {
-            window.open(data.authorizationUrl, '_blank')
-          }
-        },
-        onError: (error) => setResult({ status: 'authorization-required', callbackUrl: error.message }),
-      },
-    )
-  }
+  useEffect(() => {
+    if (open && !startedRef.current) {
+      startedRef.current = true
+      setResult(null)
+      setError(null)
+      setElapsed(0)
+      start(false)
+    }
+  }, [open])
 
   useEffect(() => {
-    if (!open) {
-      setResult(null)
-      setElapsed(0)
-      return
-    }
+    if (!open) return
     if (result?.status === 'authorization-required' && result.authorizationUrl) {
       pollRef.current = window.setInterval(() => {
         setElapsed((value) => value + 2)
@@ -59,22 +50,37 @@ export function OAuthAuthorizeSheet({
     }
   }, [open, result?.status, result?.authorizationUrl])
 
+  const start = (force: boolean) => {
+    setError(null)
+    authorize.mutate(
+      { id: credentialId, force },
+      {
+        onSuccess: (data) => {
+          setResult(data)
+          if (data.status === 'authorization-required' && data.authorizationUrl) {
+            window.open(data.authorizationUrl, '_blank')
+          }
+        },
+        onError: (err) => setError(err.message),
+      },
+    )
+  }
+
   const authorized = credential?.status === 'ready'
-  const pending = result?.status === 'authorization-required' && !authorized
-  const timedOut = pending && elapsed >= 600
+  const waiting = result?.status === 'authorization-required' && !authorized && !error
+  const timedOut = waiting && elapsed >= 600
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title={`OAuth · ${credentialName}`}>
       <div className="flex flex-col gap-4">
-        {!result && !authorize.isPending && (
-          <div className="flex flex-col gap-3">
-            <p className="text-sm text-ink-2">{t('common.loading')}</p>
+        {authorize.isPending && (
+          <div className="flex items-center gap-2 text-sm text-ink">
+            <StatusDot tone="accent" pulse />
+            <span>{t('oauth.authorizing')}</span>
           </div>
         )}
 
-        {authorize.isPending && <p className="text-sm text-ink-3">{t('common.loading')}</p>}
-
-        {result?.status === 'authorization-required' && result.authorizationUrl && !authorized && (
+        {waiting && result?.authorizationUrl && (
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-sm text-ink">
               <StatusDot tone="accent" pulse />
@@ -84,10 +90,7 @@ export function OAuthAuthorizeSheet({
               <code className="min-w-0 flex-1 truncate font-mono text-xs text-ink-2">
                 {result.authorizationUrl}
               </code>
-              <Button
-                size="sm"
-                onClick={() => window.open(result.authorizationUrl, '_blank')}
-              >
+              <Button size="sm" onClick={() => window.open(result.authorizationUrl, '_blank')}>
                 <ExternalLink className="size-3.5" />
                 {t('oauth.open')}
               </Button>
@@ -107,6 +110,16 @@ export function OAuthAuthorizeSheet({
           </div>
         )}
 
+        {error && (
+          <div className="flex flex-col gap-3">
+            <div className="text-sm text-danger">{error}</div>
+            <Button onClick={() => start(true)}>
+              <RefreshCw className="size-4" />
+              {t('oauth.retry')}
+            </Button>
+          </div>
+        )}
+
         {authorized && (
           <div className="flex items-center gap-2 text-sm text-ink">
             <StatusDot tone="success" />
@@ -122,11 +135,6 @@ export function OAuthAuthorizeSheet({
         )}
 
         <div className="mt-2 flex gap-2">
-          {!authorized && (
-            <Button variant="primary" onClick={() => start(true)}>
-              {t('common.retry')}
-            </Button>
-          )}
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {t('common.close')}
           </Button>

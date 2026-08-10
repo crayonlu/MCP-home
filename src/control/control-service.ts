@@ -70,7 +70,10 @@ export class ControlService {
   }
 
   listServers() {
-    return this.#store.listServers();
+    return this.#store.listServers().map((server) => ({
+      ...server,
+      runtime: this.#store.getRuntimeState(server.id),
+    }));
   }
 
   async createServer(value: unknown) {
@@ -91,7 +94,7 @@ export class ControlService {
   getServer(id: string) {
     const server = this.#store.getServer(id);
     if (!server) throw new AppError('server_not_found', 'Server not found', 404);
-    return server;
+    return { ...server, runtime: this.#store.getRuntimeState(id) };
   }
 
   async updateServer(id: string, value: unknown) {
