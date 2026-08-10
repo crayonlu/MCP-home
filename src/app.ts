@@ -1,7 +1,3 @@
-import { serveStatic } from '@hono/node-server/serve-static';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { loadConfig, type RuntimeConfig } from './config.js';
 import { mountControlApi } from './control/control-api.js';
 import { ControlService } from './control/control-service.js';
@@ -85,19 +81,14 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
     return context.json({ status: 'degraded' }, 503);
   });
 
-  const publicRoot = fileURLToPath(new URL('../public/', import.meta.url));
-  if (existsSync(publicRoot)) {
-    app.use('/*', serveStatic({ root: publicRoot }));
-    app.get('*', serveStatic({ path: join(publicRoot, 'index.html') }));
-  } else {
-    app.get('/', (context) =>
-      context.json({
-        name: 'MCP Home',
-        version: '0.1.0',
-        message: 'Build the Web console with npm run build:web.',
-      }),
-    );
-  }
+  app.get('/', (context) =>
+    context.json({
+      name: 'MCP Home',
+      version: '0.1.0',
+      message: 'MCP Home is running. Manage it with the mcp-home CLI.',
+      endpoints: { mcp: '/mcp', controlApi: '/api/v1', openapi: '/api/v1/openapi.json' },
+    }),
+  );
 
   for (const server of store.listServers().filter((item) => item.enabled)) {
     if (store.getSnapshot(server.id)) continue;

@@ -15,12 +15,10 @@
     "fsevents": false
   },
   "scripts": {
-    "build": "npm run build:server && npm run build:web",
+    "build": "npm run build:server",
     "build:server": "tsc -p tsconfig.build.json",
-    "build:web": "vite build",
     "check": "tsc -p tsconfig.json --noEmit",
     "dev": "tsx watch src/main.ts",
-    "dev:web": "vite",
     "start": "node dist/server/main.js",
     "cli": "tsx src/cli/main.ts",
     "format": "prettier --write .",
@@ -32,28 +30,19 @@
     "test:all": "npm run format:check && npm run build && npm run test && npm run test:real"
   },
   "dependencies": {
-    "@cloudflare/kumo": "^2.9.2",
     "@hono/node-server": "2.1.0",
     "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/core": "2.0.0",
     "@modelcontextprotocol/hono": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
-    "@phosphor-icons/react": "^2.1.10",
     "commander": "15.0.0",
     "hono": "4.13.1",
     "jose": "6.2.8",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
     "zod": "4.4.3"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "26.2.0",
-    "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.4",
-    "@vitejs/plugin-react": "6.0.5",
     "prettier": "3.9.6",
-    "tailwindcss": "^4.3.3",
     "tsx": "4.23.11",
     "typescript": "7.0.2",
     "vite": "8.2.1",

@@ -17,10 +17,7 @@
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["node", "vite/client"],
-    "paths": {
-      "@/*": ["./web/src/*"]
-    }
+    "types": ["node"]
   },
-  "include": ["src", "web", "tests", "scripts", "vite.config.ts", "vitest.config.ts"]
+  "include": ["src", "tests", "scripts", "vitest.config.ts"]
 }
