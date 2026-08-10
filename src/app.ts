@@ -1,4 +1,5 @@
 import { loadConfig, type RuntimeConfig } from './config.js';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { mountControlApi } from './control/control-api.js';
 import { ControlService } from './control/control-service.js';
 import { DataPlane } from './data-plane/data-plane.js';
@@ -87,14 +88,31 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
     return context.json({ status: 'degraded' }, 503);
   });
 
-  app.get('/', (context) =>
-    context.json({
-      name: 'MCP Home',
-      version: '0.1.0',
-      message: 'MCP Home is running. Manage it with the mcp-home CLI.',
-      endpoints: { mcp: '/mcp', controlApi: '/api/v1', openapi: '/api/v1/openapi.json' },
-    }),
-  );
+  if (config.webDir) {
+    app.get('/assets/*', serveStatic({ root: config.webDir }));
+    app.get('*', (context, next) => {
+      const path = context.req.path;
+      if (
+        path.startsWith('/api') ||
+        path.startsWith('/mcp') ||
+        path.startsWith('/oauth') ||
+        path === '/healthz' ||
+        path === '/readyz'
+      ) {
+        return next();
+      }
+      return serveStatic({ path: 'index.html', root: config.webDir })(context, next);
+    });
+  } else {
+    app.get('/', (context) =>
+      context.json({
+        name: 'MCP Home',
+        version: '0.1.0',
+        message: 'MCP Home is running. Manage it with the mcp-home CLI.',
+        endpoints: { mcp: '/mcp', controlApi: '/api/v1', openapi: '/api/v1/openapi.json' },
+      }),
+    );
+  }
 
   for (const server of store.listServers().filter((item) => item.enabled)) {
     if (store.getSnapshot(server.id)) continue;

@@ -26,9 +26,11 @@
     "fsevents": false
   },
   "scripts": {
-    "build": "npm run build:server",
+    "build": "npm run build:server && npm run build:web",
     "build:server": "tsc -p tsconfig.build.json",
-    "prepublishOnly": "npm run build",
+    "build:web": "npm --prefix web run build",
+    "dev:web": "npm --prefix web run dev",
+    "prepublishOnly": "npm run build:server",
     "check": "tsc -p tsconfig.json --noEmit",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/server/main.js",
