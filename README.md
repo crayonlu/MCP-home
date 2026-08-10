@@ -140,10 +140,20 @@ npm run cli -- auth login \
 
 npm run cli -- server list
 npm run cli -- server add ./server.json
-npm run cli -- credential authorize <credential-id>
+npm run cli -- credential authorize cloudflare
 npm run cli -- access-key create laptop
 npm run cli -- endpoint aggregate
 npm run cli -- doctor
+```
+
+`credential authorize <name>` 按凭据名（或 id）解析，自动在浏览器打开授权链接并保持等待，直到授权成功、失败或超时：
+
+```bash
+npm run cli -- credential authorize notion --server notion   # 指定 server（可省略，自动解析）
+npm run cli -- credential authorize notion --force            # 清掉旧 client 重新授权
+npm run cli -- credential authorize notion --no-open          # 不自动打开浏览器
+npm run cli -- credential authorize notion --no-wait          # 只打印链接，不等待
+npm run cli -- credential authorize notion --timeout 300      # 等待时长（秒，默认 600）
 ```
 
 CLI 为每项 Control API 能力提供命令，并保留通用入口：

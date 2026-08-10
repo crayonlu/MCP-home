@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawn } from 'node:child_process';
 import { Command } from 'commander';
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -100,15 +101,94 @@ for (const action of ['test', 'revoke']) {
     );
 }
 credential
-  .command('authorize <id>')
-  .option('--server-id <id>', 'associated remote MCP server')
+  .command('authorize <name>')
+  .description('Authorize an OAuth credential by name, open the browser, and wait for the result')
+  .option('--server <name>', 'associated remote MCP server (slug or name)')
   .option('--force', 'force a new authorization grant')
+  .option('--no-open', 'do not open the browser automatically')
+  .option('--no-wait', 'print the authorization URL and exit without waiting')
+  .option('--timeout <seconds>', 'how long to wait for authorization', parsePositiveInt, 600)
   .action(
-    run((client, id: string, options: { serverId?: string; force?: boolean }) => {
-      return client.request('POST', `/api/v1/credentials/${id}/authorize`, {
-        ...(options.serverId === undefined ? {} : { serverId: options.serverId }),
+    run(async (client, name: string, options: AuthorizeOptions) => {
+      const credentials = (await client.request('GET', '/api/v1/credentials')) as CredentialSummary[];
+      const credential = resolveCredential(credentials, name);
+      const servers = (await client.request('GET', '/api/v1/servers')) as ServerSummary[];
+      const bound = servers.filter((server) => server.credentialId === credential.id);
+      let serverId: string | undefined;
+      if (options.server) {
+        const server = resolveServer(servers, options.server);
+        if (server.credentialId !== credential.id) {
+          throw new Error(`Server "${options.server}" is not attached to credential "${name}"`);
+        }
+        serverId = server.id;
+      } else if (bound.length === 1 && bound[0] !== undefined) {
+        serverId = bound[0].id;
+      } else if (bound.length === 0) {
+        throw new Error(`Credential "${name}" is not attached to any server; pass --server`);
+      } else {
+        throw new Error(
+          `Credential "${name}" is attached to ${bound.length} servers; pass --server to disambiguate`,
+        );
+      }
+
+      const result = (await client.request('POST', `/api/v1/credentials/${credential.id}/authorize`, {
+        serverId,
         force: options.force ?? false,
-      });
+      })) as { status: string; authorizationUrl?: string };
+
+      if (program.opts<GlobalOptions>().output === 'json') {
+        print(result, program.opts<GlobalOptions>().output);
+      }
+
+      if (result.status === 'authorized') {
+        process.stdout.write(`✓ "${credential.name}" is already authorized.\n`);
+        return;
+      }
+
+      const authorizationUrl = result.authorizationUrl;
+      if (!authorizationUrl) {
+        throw new Error(`Authorization did not return a URL (status "${result.status}")`);
+      }
+
+      if (options.open) {
+        process.stdout.write(`Opening browser for "${credential.name}"...\n`);
+        openUrl(authorizationUrl);
+        process.stdout.write(`If the browser did not open, visit:\n  ${authorizationUrl}\n`);
+      } else {
+        process.stdout.write(`Visit this URL to authorize "${credential.name}":\n  ${authorizationUrl}\n`);
+      }
+
+      if (!options.wait) return;
+
+      const timeoutSeconds = options.timeout ?? 600;
+      process.stdout.write(
+        `Waiting for authorization to complete (up to ${timeoutSeconds}s). Press Ctrl+C to cancel...\n`,
+      );
+      const deadline = Date.now() + timeoutSeconds * 1_000;
+      for (;;) {
+        await sleep(2_000);
+        if (Date.now() > deadline) {
+          process.stdout.write(
+            `✗ Timed out after ${timeoutSeconds}s with no authorization.\n` +
+              `If you haven't finished yet, open the URL above or re-run this command.\n`,
+          );
+          process.exitCode = 1;
+          return;
+        }
+        const current = (await client.request(
+          'GET',
+          `/api/v1/credentials/${credential.id}`,
+        )) as CredentialSummary;
+        if (current.status !== 'pending') {
+          if (current.status === 'ready') {
+            process.stdout.write(`✓ "${credential.name}" authorized successfully.\n`);
+          } else {
+            process.stdout.write(`✗ Authorization ended with status "${current.status}".\n`);
+            process.exitCode = 1;
+          }
+          return;
+        }
+      }
     }),
   );
 
@@ -231,7 +311,7 @@ function run<TArgs extends unknown[]>(
         new ControlClient(new URL(connection.url), connection.controlKey),
         ...args,
       );
-      print(value, options.output);
+      if (value !== undefined) print(value, options.output);
     } catch (error) {
       process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
       process.exitCode = 1;
@@ -270,4 +350,89 @@ function print(value: unknown, output: 'human' | 'json'): void {
 
 function parseOutput(value: string): 'human' | 'json' {
   return z.enum(['human', 'json']).parse(value);
+}
+
+interface AuthorizeOptions {
+  server?: string;
+  force?: boolean;
+  open?: boolean;
+  wait?: boolean;
+  timeout?: number;
+}
+
+interface CredentialSummary {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+}
+
+interface ServerSummary {
+  id: string;
+  slug: string;
+  name: string;
+  credentialId: string | null;
+}
+
+function resolveCredential(credentials: CredentialSummary[], value: string): CredentialSummary {
+  const byId = credentials.find((credential) => credential.id === value);
+  if (byId) return byId;
+  const exact = credentials.filter((credential) => credential.name === value);
+  if (exact.length === 1 && exact[0] !== undefined) return exact[0];
+  const loose = credentials.filter(
+    (credential) => credential.name.toLowerCase() === value.toLowerCase(),
+  );
+  if (loose.length === 1 && loose[0] !== undefined) return loose[0];
+  if (exact.length > 1) {
+    throw new Error(`Multiple credentials named "${value}"; use a unique name or the credential id`);
+  }
+  const names = credentials.map((credential) => credential.name).join(', ');
+  throw new Error(`Credential "${value}" not found. Available credentials: ${names || '(none)'}`);
+}
+
+function resolveServer(servers: ServerSummary[], value: string): ServerSummary {
+  const bySlug = servers.find((server) => server.slug === value);
+  if (bySlug) return bySlug;
+  const byId = servers.find((server) => server.id === value);
+  if (byId) return byId;
+  const byName = servers.filter((server) => server.name === value);
+  if (byName.length === 1 && byName[0] !== undefined) return byName[0];
+  if (byName.length > 1) {
+    throw new Error(`Multiple servers named "${value}"; use a unique slug or the server id`);
+  }
+  const names = servers.map((server) => `${server.slug} (${server.name})`).join(', ');
+  throw new Error(`Server "${value}" not found. Available servers: ${names || '(none)'}`);
+}
+
+function openUrl(url: string): void {
+  const { platform } = process;
+  let command: string;
+  let args: string[];
+  if (platform === 'darwin') {
+    command = 'open';
+    args = [url];
+  } else if (platform === 'win32') {
+    command = 'cmd';
+    args = ['/c', 'start', '', url];
+  } else {
+    command = 'xdg-open';
+    args = [url];
+  }
+  const child = spawn(command, args, { stdio: 'ignore', detached: true });
+  child.on('error', () => {
+    process.stdout.write(`Could not open the browser automatically. Visit:\n  ${url}\n`);
+  });
+  child.unref();
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parsePositiveInt(value: string | number): number {
+  const parsed = typeof value === 'number' ? value : Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error(`Expected a positive integer, got "${value}"`);
+  }
+  return parsed;
 }
