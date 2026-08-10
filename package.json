@@ -1,12 +1,23 @@
 {
   "name": "mcp-home",
   "version": "0.1.0",
-  "private": true,
   "description": "Self-hosted home for remote-native and home-hosted MCP servers.",
   "type": "module",
   "bin": {
     "mcp-home": "./dist/server/cli/main.js"
   },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "gateway",
+    "proxy",
+    "oauth",
+    "self-hosted"
+  ],
+  "license": "MIT",
   "engines": {
     "node": ">=24.0.0"
   },
@@ -17,6 +28,7 @@
   "scripts": {
     "build": "npm run build:server",
     "build:server": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build",
     "check": "tsc -p tsconfig.json --noEmit",
     "dev": "tsx watch src/main.ts",
     "start": "node dist/server/main.js",
