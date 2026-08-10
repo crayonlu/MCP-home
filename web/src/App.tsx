@@ -1,10 +1,75 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { useEffect } from 'react'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
+import { AppShell } from './app/AppShell'
+import { I18nProvider } from './i18n'
+import { ToastProvider } from './components/ui/Toast'
+import { getStoredKey } from './api/client'
+import { LoginPage } from './features/login/LoginPage'
+import { DashboardPage } from './features/dashboard/DashboardPage'
+import { ServersPage } from './features/servers/ServersPage'
+import { ServerDetailPage } from './features/servers/ServerDetailPage'
+import { CredentialsPage } from './features/credentials/CredentialsPage'
+import { AccessKeysPage } from './features/access-keys/AccessKeysPage'
+import { EndpointsPage } from './features/endpoints/EndpointsPage'
+import { DiagnosticsPage } from './features/diagnostics/DiagnosticsPage'
+import { EventsPage } from './features/events/EventsPage'
+import { SettingsPage } from './features/settings/SettingsPage'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
+
+function hasKey(): boolean {
+  return getStoredKey() !== null
+}
+
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    const onUnauthorized = () => {
+      window.location.href = '/login'
+    }
+    window.addEventListener('mch:unauthorized', onUnauthorized)
+    return () => window.removeEventListener('mch:unauthorized', onUnauthorized)
+  }, [])
+  return hasKey() ? children : <Navigate to="/login" replace />
+}
+
 export function App() {
   return (
-    <main className="flex min-h-full items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-2xl font-semibold tracking-[-0.02em]">MCP Home</h1>
-        <p className="mt-2 text-ink-2">console scaffold</p>
-      </div>
-    </main>
+    <QueryClientProvider client={queryClient}>
+      <I18nProvider>
+        <ToastProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route
+                element={
+                  <RequireAuth>
+                    <AppShell />
+                  </RequireAuth>
+                }
+              >
+                <Route index element={<DashboardPage />} />
+                <Route path="/servers" element={<ServersPage />} />
+                <Route path="/servers/:id" element={<ServerDetailPage />} />
+                <Route path="/credentials" element={<CredentialsPage />} />
+                <Route path="/access-keys" element={<AccessKeysPage />} />
+                <Route path="/endpoints" element={<EndpointsPage />} />
+                <Route path="/diagnostics" element={<DiagnosticsPage />} />
+                <Route path="/events" element={<EventsPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+              </Route>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </ToastProvider>
+      </I18nProvider>
+    </QueryClientProvider>
   )
 }
