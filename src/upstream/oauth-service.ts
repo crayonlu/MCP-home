@@ -37,9 +37,9 @@ export class UpstreamOAuthService {
     this.#urlClientId = urlClientId;
   }
 
-  #provider(credentialId: string) {
+  #provider(credentialId: string, urlClientId = this.#urlClientId) {
     return new StoredOAuthProvider(this.#store, credentialId, this.#publicUrl, {
-      urlClientId: this.#urlClientId,
+      urlClientId,
     });
   }
 
@@ -50,7 +50,10 @@ export class UpstreamOAuthService {
   async begin(credentialId: string, value: unknown = {}) {
     const input = beginInputSchema.parse(value);
     const server = this.#serverFor(credentialId, input.serverId);
-    const provider = this.#provider(credentialId);
+    const provider = this.#provider(
+      credentialId,
+      server.settings.urlClientId ?? this.#urlClientId,
+    );
     const payload = this.#oauthPayload(credentialId);
     if (input.force) {
       // A forced flow starts over: discard any previously registered client so
@@ -99,7 +102,10 @@ export class UpstreamOAuthService {
 
   async callback(credentialId: string, input: { code: string; state: string; iss?: string }) {
     const server = this.#serverFor(credentialId);
-    const provider = this.#provider(credentialId);
+    const provider = this.#provider(
+      credentialId,
+      server.settings.urlClientId ?? this.#urlClientId,
+    );
     provider.validateCallbackState(input.state);
     const payload = this.#oauthPayload(credentialId);
     const result = await auth(provider, {
@@ -129,7 +135,10 @@ export class UpstreamOAuthService {
 
   async revoke(credentialId: string) {
     const server = this.#serverFor(credentialId);
-    const provider = this.#provider(credentialId);
+    const provider = this.#provider(
+      credentialId,
+      server.settings.urlClientId ?? this.#urlClientId,
+    );
     const payload = this.#oauthPayload(credentialId);
     const metadata = payload.discoveryState?.authorizationServerMetadata;
     const endpointValue = metadata ? Reflect.get(metadata, 'revocation_endpoint') : undefined;

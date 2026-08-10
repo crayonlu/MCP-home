@@ -69,6 +69,7 @@ const serverSettingsObjectSchema = z.object({
   maxTotalTimeoutMs: z.number().int().min(100).max(86_400_000).default(600_000),
   maxConcurrency: z.number().int().min(1).max(32).default(1),
   restart: z.enum(['never', 'on-failure', 'always']).default('on-failure'),
+  urlClientId: z.boolean().optional(),
 });
 
 export const serverSettingsSchema = serverSettingsObjectSchema.superRefine((value, context) => {

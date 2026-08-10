@@ -72,7 +72,7 @@ export class CredentialResolver {
           headers: {},
           env: {},
           authProvider: new StoredOAuthProvider(this.#store, credentialId, this.#publicUrl, {
-            urlClientId: this.#urlClientId,
+            urlClientId: server.settings.urlClientId ?? this.#urlClientId,
           }),
         };
     }

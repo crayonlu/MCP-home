@@ -35,8 +35,15 @@ export const marketCatalog: MarketEntry[] = [
     category: 'devtools',
     kind: 'remote',
     url: 'https://api.githubcopilot.com/mcp/',
-    credential: { type: 'oauth' },
-    requires: [],
+    credential: { type: 'bearer', tokenKey: 'GITHUB_PERSONAL_ACCESS_TOKEN' },
+    requires: [
+      {
+        name: 'GITHUB_PERSONAL_ACCESS_TOKEN',
+        description: 'GitHub PAT (github.com/settings/personal-access-tokens)',
+        secret: true,
+        required: true,
+      },
+    ],
     docs: 'https://github.com/github/github-mcp-server',
   },
   {
