@@ -69,17 +69,6 @@ export const marketCatalog: MarketEntry[] = [
     docs: 'https://api.slack.com/mcp',
   },
   {
-    id: 'vercel',
-    name: 'Vercel',
-    description: 'Deployments, build logs, environments, and previews',
-    category: 'devtools',
-    kind: 'remote',
-    url: 'https://mcp.vercel.com/mcp',
-    credential: { type: 'oauth' },
-    requires: [],
-    docs: 'https://vercel.com/docs/integrations/mcp',
-  },
-  {
     id: 'stripe',
     name: 'Stripe',
     description: 'Payments, customers, invoices, and subscriptions',

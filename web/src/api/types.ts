@@ -9,6 +9,7 @@ export interface ServerSettings {
   maxTotalTimeoutMs: number
   maxConcurrency: number
   restart: 'on-failure' | 'always' | 'never'
+  urlClientId?: boolean
 }
 
 export interface ServerRecord {

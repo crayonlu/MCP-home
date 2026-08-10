@@ -258,6 +258,10 @@ export function mountControlApi(
   const market = options.market;
   if (market) {
     app.get('/api/v1/market', route(() => market.list()));
+    app.get(
+      '/api/v1/market/install/:jobId',
+      route((context) => market.getJob(context.req.param('jobId'))),
+    );
     app.post(
       '/api/v1/market/:id/install',
       route(async (context) => {

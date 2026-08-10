@@ -15,7 +15,19 @@ export interface ServerFormValue {
   transport: Transport
   credentialId: string | null
   enabled: boolean
+  settings?: { urlClientId?: boolean }
 }
+
+type RegistrationMode = 'auto' | 'url' | 'dcr'
+
+const registrationToUrlClientId: Record<RegistrationMode, boolean | undefined> = {
+  auto: undefined,
+  url: true,
+  dcr: false,
+}
+
+const registrationFromUrlClientId = (value?: boolean): RegistrationMode =>
+  value === true ? 'url' : value === false ? 'dcr' : 'auto'
 
 export function ServerFormSheet({
   open,
@@ -42,6 +54,7 @@ export function ServerFormSheet({
   const [args, setArgs] = useState('')
   const [credentialId, setCredentialId] = useState('')
   const [enabled, setEnabled] = useState(true)
+  const [registration, setRegistration] = useState<RegistrationMode>('auto')
 
   useEffect(() => {
     if (!open) return
@@ -53,11 +66,13 @@ export function ServerFormSheet({
     setArgs(initial?.transport.type === 'stdio' ? (initial.transport.args ?? []).join(' ') : '')
     setCredentialId(initial?.credentialId ?? '')
     setEnabled(initial?.enabled ?? true)
+    setRegistration(registrationFromUrlClientId(initial?.settings?.urlClientId))
   }, [open, initial])
 
   const submit = () => {
     const transport: Transport =
       kind === 'remote' ? { type: 'streamable-http', url } : { type: 'stdio', command, args: args ? args.split(' ').filter(Boolean) : [] }
+    const urlClientId = registrationToUrlClientId[registration]
     onSubmit({
       slug,
       name,
@@ -65,6 +80,7 @@ export function ServerFormSheet({
       transport,
       credentialId: credentialId || null,
       enabled,
+      settings: urlClientId === undefined ? undefined : { urlClientId },
     })
   }
 
@@ -108,6 +124,18 @@ export function ServerFormSheet({
           <span className="text-sm text-ink-2">{t('common.enable')}</span>
           <Toggle checked={enabled} onChange={setEnabled} />
         </div>
+        {kind === 'remote' && (
+          <SelectField
+            label="OAuth client registration"
+            value={registration}
+            onChange={(value) => setRegistration(value as RegistrationMode)}
+            options={[
+              { value: 'auto', label: 'auto (follow global default)' },
+              { value: 'url', label: 'URL-based client metadata' },
+              { value: 'dcr', label: 'dynamic client registration (DCR)' },
+            ]}
+          />
+        )}
       </FieldGroup>
       <div className="mt-5 flex justify-end gap-2">
         <Button variant="ghost" onClick={() => onOpenChange(false)}>

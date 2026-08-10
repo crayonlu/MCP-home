@@ -17,6 +17,27 @@ async function marketList(
   ) as unknown as MarketItem[];
 }
 
+async function installEntry(
+  runtime: Parameters<typeof controlRequest>[0],
+  controlKey: string,
+  id: string,
+  values: Record<string, string> = {},
+) {
+  const started = (await jsonResponse(
+    await controlRequest(runtime, controlKey, 'POST', `/api/v1/market/${id}/install`, { values }),
+  )) as { jobId: string };
+  for (;;) {
+    const job = (await jsonResponse(
+      await controlRequest(runtime, controlKey, 'GET', `/api/v1/market/install/${started.jobId}`),
+    )) as { status: string; result?: unknown; error?: string };
+    if (job.status !== 'installing') {
+      if (job.status === 'failed') throw new Error(job.error ?? 'install failed');
+      return job.result;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 describe('market', () => {
   it('lists the curated catalog with install status', async () => {
     const { runtime, controlKey, close } = createTestRuntime();
@@ -34,11 +55,9 @@ describe('market', () => {
   it('installs and uninstalls a remote bearer entry', async () => {
     const { runtime, controlKey, close } = createTestRuntime();
     try {
-      const result = (await jsonResponse(
-        await controlRequest(runtime, controlKey, 'POST', '/api/v1/market/context7/install', {
-          values: { CONTEXT7_API_KEY: 'ctx-test' },
-        }),
-      )) as { server: unknown; credential: unknown };
+      const result = (await installEntry(runtime, controlKey, 'context7', {
+        CONTEXT7_API_KEY: 'ctx-test',
+      })) as { server: unknown; credential: unknown };
       const server = serverRecordSchema.parse(result.server);
       const credential = credentialRecordSchema.parse(result.credential);
       expect(server.slug).toBe('context7');
@@ -62,9 +81,10 @@ describe('market', () => {
   it('installs a remote oauth entry with an empty credential', async () => {
     const { runtime, controlKey, close } = createTestRuntime();
     try {
-      const result = (await jsonResponse(
-        await controlRequest(runtime, controlKey, 'POST', '/api/v1/market/deepwiki/install', {}),
-      )) as { server: unknown; credential: unknown };
+      const result = (await installEntry(runtime, controlKey, 'deepwiki')) as {
+        server: unknown;
+        credential: unknown;
+      };
       const credential = credentialRecordSchema.parse(result.credential);
       expect(credential.type).toBe('oauth');
       expect(credential.status).toBe('pending');
@@ -97,9 +117,7 @@ describe('market', () => {
   it('rejects installing the same entry twice', async () => {
     const { runtime, controlKey, close } = createTestRuntime();
     try {
-      await controlRequest(runtime, controlKey, 'POST', '/api/v1/market/context7/install', {
-        values: { CONTEXT7_API_KEY: 'ctx-test' },
-      });
+      await installEntry(runtime, controlKey, 'context7', { CONTEXT7_API_KEY: 'ctx-test' });
       const second = await controlRequest(
         runtime,
         controlKey,

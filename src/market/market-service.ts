@@ -1,14 +1,26 @@
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { marketCatalog, type MarketEntry } from './catalog.js'
 import { AppError } from '../domain/errors.js'
 import type { ControlService } from '../control/control-service.js'
 import type { CredentialPayload } from '../domain/models.js'
 
+export interface InstallJob {
+  id: string
+  entryId: string
+  status: 'installing' | 'completed' | 'failed'
+  step: string
+  output: string
+  result?: unknown
+  error?: string
+}
+
 export class MarketService {
   readonly #service: ControlService;
   readonly #marketDir: string;
+  readonly #jobs = new Map<string, InstallJob>();
 
   constructor(service: ControlService, marketDir: string) {
     this.#service = service;
@@ -20,6 +32,12 @@ export class MarketService {
       ...entry,
       installed: this.#isInstalled(entry),
     }));
+  }
+
+  getJob(jobId: string): InstallJob {
+    const job = this.#jobs.get(jobId);
+    if (!job) throw new AppError('market_job_not_found', 'Install job not found', 404);
+    return job;
   }
 
   async install(id: string, values: Record<string, string> = {}) {
@@ -36,42 +54,16 @@ export class MarketService {
         );
       }
     }
-    if (entry.kind === 'home-stdio') {
-      await this.#npmInstall(entry);
-      const credential = this.#service.createCredential({
-        name: entry.name,
-        payload: { type: 'env', variables: values },
-      });
-      const args = (entry.argsTemplate ?? []).map((argument) =>
-        argument.replace(/\$\{([^}]+)\}/g, (_, key: string) => values[key] ?? ''),
-      );
-      const server = await this.#service.createServer({
-        slug: entry.id,
-        name: entry.name,
-        kind: 'home',
-        transport: {
-          type: 'stdio',
-          command: this.#binPath(entry),
-          args,
-        },
-        credentialId: credential.id,
-        enabled: true,
-      });
-      return { server, credential };
-    }
-    const credential = this.#service.createCredential({
-      name: entry.name,
-      payload: this.#credentialPayload(entry, values),
-    });
-    const server = await this.#service.createServer({
-      slug: entry.id,
-      name: entry.name,
-      kind: 'remote',
-      transport: { type: 'streamable-http', url: entry.url ?? '' },
-      credentialId: credential.id,
-      enabled: true,
-    });
-    return { server, credential };
+    const job: InstallJob = {
+      id: randomUUID(),
+      entryId: entry.id,
+      status: 'installing',
+      step: 'starting',
+      output: '',
+    };
+    this.#jobs.set(job.id, job);
+    void this.#runInstall(entry, values, job);
+    return { jobId: job.id, status: 'installing' };
   }
 
   async uninstall(id: string) {
@@ -83,6 +75,60 @@ export class MarketService {
     for (const server of servers) {
       if (server.credentialId) this.#service.deleteCredential(server.credentialId);
       this.#service.deleteServer(server.id);
+    }
+  }
+
+  #update(job: InstallJob, patch: Partial<InstallJob>) {
+    Object.assign(job, patch);
+  }
+
+  async #runInstall(entry: MarketEntry, values: Record<string, string>, job: InstallJob) {
+    try {
+      if (entry.kind === 'home-stdio') {
+        await this.#npmInstall(entry, job);
+      }
+      this.#update(job, { step: 'creating credential' });
+      const credential = this.#service.createCredential({
+        name: entry.name,
+        payload: this.#credentialPayload(entry, values),
+      });
+      this.#update(job, { step: 'creating server' });
+      let result: unknown;
+      if (entry.kind === 'home-stdio') {
+        const args = (entry.argsTemplate ?? []).map((argument) =>
+          argument.replace(/\$\{([^}]+)\}/g, (_, key: string) => values[key] ?? ''),
+        );
+        result = {
+          server: await this.#service.createServer({
+            slug: entry.id,
+            name: entry.name,
+            kind: 'home',
+            transport: { type: 'stdio', command: this.#binPath(entry), args },
+            credentialId: credential.id,
+            enabled: true,
+          }),
+          credential,
+        };
+      } else {
+        result = {
+          server: await this.#service.createServer({
+            slug: entry.id,
+            name: entry.name,
+            kind: 'remote',
+            transport: { type: 'streamable-http', url: entry.url ?? '' },
+            credentialId: credential.id,
+            enabled: true,
+          }),
+          credential,
+        };
+      }
+      this.#update(job, { status: 'completed', step: 'done', result });
+    } catch (error) {
+      this.#update(job, {
+        status: 'failed',
+        step: 'failed',
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -130,9 +176,10 @@ export class MarketService {
     }
   }
 
-  #npmInstall(entry: MarketEntry): Promise<void> {
+  #npmInstall(entry: MarketEntry, job: InstallJob): Promise<void> {
     return new Promise((resolve, reject) => {
       mkdirSync(this.#marketDir, { recursive: true });
+      this.#update(job, { step: `npm install ${entry.package ?? entry.id}` });
       const child = spawn(
         'npm',
         [
@@ -146,17 +193,18 @@ export class MarketService {
         { stdio: ['ignore', 'pipe', 'pipe'] },
       );
       let output = '';
-      child.stdout.on('data', (chunk) => {
-        output += String(chunk);
-      });
-      child.stderr.on('data', (chunk) => {
-        output += String(chunk);
-      });
+      const append = (chunk: string) => {
+        output = `${output}${chunk}`.slice(-4000);
+        this.#update(job, { output });
+      };
+      child.stdout.on('data', (chunk) => append(String(chunk)));
+      child.stderr.on('data', (chunk) => append(String(chunk)));
       const timer = setTimeout(() => child.kill('SIGKILL'), 300_000);
       child.on('close', (code) => {
         clearTimeout(timer);
         if (code === 0) resolve();
         else {
+          this.#update(job, { output });
           reject(
             new AppError(
               'market_install_failed',

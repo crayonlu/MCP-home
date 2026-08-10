@@ -247,14 +247,25 @@ market
   .description('Install a catalog entry (fill required values with --set KEY=value)')
   .option('--set <value>', 'set a value as KEY=value (repeatable)', collectValues, {})
   .action(
-    run((client, id: string, options: { set: Record<string, string> }) =>
-      client.request(
-        'POST',
-        `/api/v1/market/${id}/install`,
-        { values: options.set },
-        300_000,
-      ),
-    ),
+    run(async (client, id: string, options: { set: Record<string, string> }) => {
+      const started = (await client.request('POST', `/api/v1/market/${id}/install`, {
+        values: options.set,
+      })) as { jobId: string };
+      for (;;) {
+        const job = (await client.request('GET', `/api/v1/market/install/${started.jobId}`)) as {
+          status: string;
+          step: string;
+          result?: unknown;
+          error?: string;
+        };
+        if (job.status !== 'installing') {
+          if (job.status === 'failed') throw new Error(job.error ?? 'Install failed');
+          return job.result;
+        }
+        process.stdout.write(`\rinstalling: ${job.step}…   `);
+        await sleep(1500);
+      }
+    }),
   );
 market
   .command('uninstall <id>')

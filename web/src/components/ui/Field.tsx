@@ -10,6 +10,7 @@ export function TextField({
   required,
   mono,
   autoFocus,
+  disabled,
   className = '',
 }: {
   label?: string
@@ -20,6 +21,7 @@ export function TextField({
   required?: boolean
   mono?: boolean
   autoFocus?: boolean
+  disabled?: boolean
   className?: string
 }) {
   return (
@@ -32,8 +34,9 @@ export function TextField({
         placeholder={placeholder}
         required={required}
         autoFocus={autoFocus}
+        disabled={disabled}
         spellCheck={false}
-        className={`h-9 w-full bg-surface-2 px-3 text-sm text-ink placeholder:text-ink-3 focus:outline-none focus:ring-2 focus:ring-accent/50 ${mono ? 'font-mono' : ''}`}
+        className={`h-9 w-full bg-surface-2 px-3 text-sm text-ink placeholder:text-ink-3 focus:outline-none focus:ring-2 focus:ring-accent/50 disabled:opacity-50 ${mono ? 'font-mono' : ''}`}
       />
     </Field.Root>
   )
