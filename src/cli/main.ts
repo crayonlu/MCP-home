@@ -247,10 +247,13 @@ market
   .description('Install a catalog entry (fill required values with --set KEY=value)')
   .option('--set <value>', 'set a value as KEY=value (repeatable)', collectValues, {})
   .action(
-    run((client, id: string, command: Command) =>
-      client.request('POST', `/api/v1/market/${id}/install`, {
-        values: command.opts().set,
-      }),
+    run((client, id: string, options: { set: Record<string, string> }) =>
+      client.request(
+        'POST',
+        `/api/v1/market/${id}/install`,
+        { values: options.set },
+        300_000,
+      ),
     ),
   );
 market

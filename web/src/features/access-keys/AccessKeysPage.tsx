@@ -103,8 +103,7 @@ export function AccessKeysPage() {
         open={Boolean(secret)}
         onOpenChange={(open) => !open && setSecret(null)}
         title="access key"
-      >
-        <p className="text-sm text-ink-2">copy now — it will not be shown again</p>
+      >        <p className="text-sm text-ink-2">{t('common.copyNow')}</p>
         <div className="mt-3 flex items-center gap-2 bg-surface-2 px-3 py-2.5">
           <code className="min-w-0 flex-1 truncate font-mono text-sm text-ink">{secret}</code>
           <CopyButton text={secret ?? ''} />

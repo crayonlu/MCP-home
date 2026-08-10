@@ -40,9 +40,9 @@ export function InstallSheet({
         onSuccess: () => {
           onOpenChange(false)
           if (entry.credential.type === 'oauth') {
-            toast(`installed — authorize ${entry.name}`, 'success')
+            toast(t('market.installedAuthorize', { name: entry.name }), 'success')
           } else {
-            toast(`✓ ${entry.name} installed`, 'success')
+            toast(`✓ ${entry.name} ${t('market.install')}`, 'success')
           }
           onInstalled(entry.id)
         },
@@ -52,7 +52,7 @@ export function InstallSheet({
   }
 
   return (
-    <Sheet open onOpenChange={onOpenChange} title={`install · ${entry.name}`}>
+    <Sheet open onOpenChange={onOpenChange} title={`${t('market.install')} · ${entry.name}`}>
       <p className="mb-4 text-sm text-ink-2">{entry.description}</p>
       <FieldGroup>
         {entry.requires.map((requirement) => (
@@ -71,8 +71,8 @@ export function InstallSheet({
         {entry.requires.length === 0 && (
           <div className="text-sm text-ink-3">
             {entry.credential.type === 'oauth'
-              ? 'authorize after install'
-              : 'no configuration needed'}
+              ? t('market.authorizeAfter')
+              : t('market.noConfig')}
           </div>
         )}
       </FieldGroup>
@@ -81,7 +81,7 @@ export function InstallSheet({
           {t('common.cancel')}
         </Button>
         <Button variant="primary" loading={install.isPending} disabled={missing} onClick={submit}>
-          {install.isPending ? 'installing…' : t('common.create')}
+          {install.isPending ? t('market.installing') : t('common.create')}
         </Button>
       </div>
     </Sheet>

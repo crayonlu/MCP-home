@@ -148,7 +148,7 @@ export function AppShell() {
   const pageKey = useMemo(() => pageKeyFor(location.pathname), [location.pathname])
 
   return (
-    <div className="flex h-dvh flex-col md:flex-row">
+    <div className="flex h-dvh flex-col overflow-hidden md:flex-row">
       {!isMobile && (
         <aside className="glass hidden w-[200px] shrink-0 flex-col md:flex">
           <Brand />
@@ -162,7 +162,7 @@ export function AppShell() {
         </aside>
       )}
 
-      <main className="flex min-h-0 flex-1 flex-col">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="glass flex h-12 shrink-0 items-center gap-2 px-4 md:hidden">
           <span className="size-2 bg-accent" />
           <span className="flex-1 text-[15px] font-semibold tracking-[-0.01em]">
@@ -172,8 +172,10 @@ export function AppShell() {
           <LangSwitch />
         </header>
 
-        <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 md:px-8 md:py-6">
-          <Outlet />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-6xl px-4 py-5 md:px-8 md:py-6">
+            <Outlet />
+          </div>
         </div>
       </main>
 

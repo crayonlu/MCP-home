@@ -78,7 +78,7 @@ export function OAuthAuthorizeSheet({
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-sm text-ink">
               <StatusDot tone="accent" pulse />
-              <span>authorizing…</span>
+              <span>{t('oauth.authorizing')}</span>
             </div>
             <div className="flex items-center gap-2 bg-surface-2 px-3 py-2.5">
               <code className="min-w-0 flex-1 truncate font-mono text-xs text-ink-2">
@@ -89,19 +89,19 @@ export function OAuthAuthorizeSheet({
                 onClick={() => window.open(result.authorizationUrl, '_blank')}
               >
                 <ExternalLink className="size-3.5" />
-                open
+                {t('oauth.open')}
               </Button>
             </div>
             <div className="flex items-center gap-2 text-xs text-ink-3">
               <RefreshCw className="size-3 animate-spin" />
               {timedOut
-                ? 'timed out — click retry'
-                : `waiting… ${Math.max(0, 600 - elapsed)}s left`}
+                ? t('oauth.timedOut')
+                : t('oauth.waiting', { seconds: Math.max(0, 600 - elapsed) })}
             </div>
             {timedOut && (
               <Button onClick={() => start(true)}>
                 <RefreshCw className="size-4" />
-                {t('common.retry')}
+                {t('oauth.retry')}
               </Button>
             )}
           </div>
@@ -110,7 +110,7 @@ export function OAuthAuthorizeSheet({
         {authorized && (
           <div className="flex items-center gap-2 text-sm text-ink">
             <StatusDot tone="success" />
-            <span>✓ authorized</span>
+            <span>{t('oauth.authorized')}</span>
           </div>
         )}
 

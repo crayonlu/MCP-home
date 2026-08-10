@@ -122,19 +122,19 @@ export function SettingsPage() {
         </div>
       </Section>
 
-      <Section title="config">
+      <Section title={t('settings.config')}>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => exportConfig(false)}>
             <Download className="size-4" />
-            export
+            {t('settings.export')}
           </Button>
           <Button onClick={() => exportConfig(true)}>
             <Download className="size-4" />
-            export (secrets)
+            {t('settings.exportSecrets')}
           </Button>
           <Button onClick={() => fileRef.current?.click()} loading={importing}>
             <Upload className="size-4" />
-            import
+            {t('settings.import')}
           </Button>
           <input
             ref={fileRef}
@@ -149,7 +149,7 @@ export function SettingsPage() {
         </div>
       </Section>
 
-      <Section title="control keys">
+      <Section title={t('settings.controlKeys')}>
         <div className="flex flex-col divide-y divide-ink-3/10">
           {(controlKeys ?? []).map((key) => (
             <div key={key.id} className="flex items-center gap-3 px-1 py-2">
@@ -162,9 +162,9 @@ export function SettingsPage() {
                 variant="ghost"
                 onClick={async () => {
                   const ok = await confirm({
-                    title: 'revoke',
-                    description: `revoke ${key.name}?`,
-                    confirmLabel: 'revoke',
+                    title: t('credential.revoke'),
+                    description: `${t('credential.revoke')} ${key.name}?`,
+                    confirmLabel: t('credential.revoke'),
                     danger: true,
                   })
                   if (!ok) return
@@ -187,7 +187,7 @@ export function SettingsPage() {
         </div>
       </Section>
 
-      <Section title="raw api">
+      <Section title={t('settings.rawApi')}>
         <div className="flex flex-col gap-3 bg-surface p-4">
           <div className="flex gap-2">
             <select
@@ -207,7 +207,7 @@ export function SettingsPage() {
             />
             <Button onClick={runRaw}>
               <Terminal className="size-4" />
-              run
+              {t('settings.run')}
             </Button>
           </div>
           {method !== 'GET' && method !== 'DELETE' && (
@@ -227,7 +227,7 @@ export function SettingsPage() {
         </div>
       </Section>
 
-      <Dialog open={keyOpen} onOpenChange={setKeyOpen} title="create control key">
+      <Dialog open={keyOpen} onOpenChange={setKeyOpen} title={t('settings.createControlKey')}>
         <TextField
           label={t('common.name')}
           value={keyName}
@@ -264,7 +264,7 @@ export function SettingsPage() {
         onOpenChange={(open) => !open && setSecret(null)}
         title="control key"
       >
-        <p className="text-sm text-ink-2">copy now — it will not be shown again</p>
+        <p className="text-sm text-ink-2">{t('common.copyNow')}</p>
         <div className="mt-3 flex items-center gap-2 bg-surface-2 px-3 py-2.5">
           <code className="min-w-0 flex-1 truncate font-mono text-sm text-ink">{secret}</code>
           <CopyButton text={secret ?? ''} />

@@ -9,7 +9,12 @@ export class ControlClient {
     this.#apiKey = apiKey;
   }
 
-  async request(method: string, path: string, body?: unknown): Promise<unknown> {
+  async request(
+    method: string,
+    path: string,
+    body?: unknown,
+    timeoutMs = 30_000,
+  ): Promise<unknown> {
     const target = new URL(path, this.#baseUrl);
     if (target.origin !== this.#baseUrl.origin || !target.pathname.startsWith('/api/v1/')) {
       throw new AppError('invalid_control_path', 'Control API path must stay under /api/v1/', 400);
@@ -17,7 +22,7 @@ export class ControlClient {
     const response = await fetch(target, {
       method,
       redirect: 'error',
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(timeoutMs),
       headers: {
         accept: 'application/json',
         authorization: `Bearer ${this.#apiKey}`,

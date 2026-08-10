@@ -41,10 +41,10 @@ export function ServerDetailPage() {
   const endpoint = `https://mcp.cyncyn.xyz/mcp/${server.slug}`
 
   const tabs: TabItem[] = [
-    { value: 'overview', label: 'overview' },
-    { value: 'capability', label: `capability (${capability?.tools.length ?? 0})` },
-    { value: 'logs', label: 'logs' },
-    { value: 'settings', label: 'settings' },
+    { value: 'overview', label: t('server.overview') },
+    { value: 'capability', label: `${t('server.capability')} (${capability?.tools.length ?? 0})` },
+    { value: 'logs', label: t('server.logs') },
+    { value: 'settings', label: t('server.settings') },
   ]
 
   const handleSubmit = (value: ServerFormValue) => {
@@ -108,7 +108,7 @@ export function ServerDetailPage() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-ink-3">public endpoint</div>
+                    <div className="text-xs text-ink-3">{t('server.publicEndpoint')}</div>
                     <div className="flex items-center gap-2">
                       <code className="min-w-0 flex-1 truncate font-mono text-sm text-ink">
                         {endpoint}
@@ -122,13 +122,13 @@ export function ServerDetailPage() {
                 </div>
                 <div className="flex flex-col gap-3 bg-surface p-4">
                   <div>
-                    <div className="text-xs text-ink-3">protocol</div>
+                    <div className="text-xs text-ink-3">{t('server.protocol')}</div>
                     <div className="font-mono text-sm text-ink">
                       {capability?.protocolVersion ?? '—'}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-ink-3">server info</div>
+                    <div className="text-xs text-ink-3">{t('server.serverInfo')}</div>
                     <div className="font-mono text-sm text-ink">
                       {capability?.serverInfo?.name
                         ? `${capability.serverInfo.name} ${capability.serverInfo.version ?? ''}`
@@ -136,7 +136,7 @@ export function ServerDetailPage() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-ink-3">tools / prompts / resources</div>
+                    <div className="text-xs text-ink-3">{t('server.toolCount')}</div>
                     <div className="font-mono text-sm text-ink">
                       {capability?.tools.length ?? 0} / {capability?.prompts.length ?? 0} /{' '}
                       {capability?.resources.length ?? 0}
@@ -153,7 +153,7 @@ export function ServerDetailPage() {
                   <div className="text-sm text-ink-3">{t('common.loading')}</div>
                 ) : (
                   <>
-                    <Section title={`tools (${capability.tools.length})`}>
+                    <Section title={`${t('server.tools')} (${capability.tools.length})`}>
                       {capability.tools.length === 0 ? (
                         <div className="text-xs text-ink-3">—</div>
                       ) : (
@@ -171,7 +171,7 @@ export function ServerDetailPage() {
                         </div>
                       )}
                     </Section>
-                    <Section title={`prompts (${capability.prompts.length})`}>
+                    <Section title={`${t('server.prompts')} (${capability.prompts.length})`}>
                       {capability.prompts.map((prompt) => (
                         <div key={prompt.name} className="px-1 py-1 font-mono text-[13px] text-ink">
                           {prompt.name}
@@ -210,9 +210,9 @@ export function ServerDetailPage() {
               />
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between bg-surface px-4 py-3">
-                  <span className="text-sm text-ink-2">restart</span>
+                  <span className="text-sm text-ink-2">{t('server.restart')}</span>
                   <Button onClick={() => serverAction.mutate({ id, action: 'restart' })}>
-                    restart
+                    {t('server.restart')}
                   </Button>
                 </div>
                 <div className="flex items-center justify-between bg-surface px-4 py-3">

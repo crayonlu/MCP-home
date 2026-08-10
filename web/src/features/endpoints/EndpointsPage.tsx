@@ -15,7 +15,7 @@ export function EndpointsPage() {
       <h1 className="text-xl font-semibold tracking-[-0.02em]">{t('nav.endpoints')}</h1>
 
       <div className="flex flex-col gap-2 bg-surface px-4 py-4">
-        <div className="text-[13px] font-medium text-ink-3">aggregate</div>
+        <div className="text-[13px] font-medium text-ink-3">{t('endpoints.aggregate')}</div>
         <div className="flex items-center gap-2">
           <code className="min-w-0 flex-1 truncate font-mono text-sm text-ink">{aggregate}</code>
           <CopyButton text={aggregate} />

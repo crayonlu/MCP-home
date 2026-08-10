@@ -31,7 +31,7 @@ export function DiagnosticsPage() {
           <div className="flex items-center gap-2 text-sm">
             <StatusDot tone={diagnostics?.ok ? 'success' : 'danger'} />
             <span className="text-ink">
-              {diagnostics?.ok ? 'operational' : 'degraded'}
+              {diagnostics?.ok ? t('common.operational') : t('common.degraded')}
             </span>
           </div>
           <div className="flex flex-col divide-y divide-ink-3/10">
@@ -48,7 +48,7 @@ export function DiagnosticsPage() {
                     {server.lastError ?? ''}
                   </span>
                   <span className="text-xs text-ink-3">
-                    {server.hasSnapshot ? 'snapshot ✓' : ''}
+                    {server.hasSnapshot ? t('diagnostics.snapshot') : ''}
                   </span>
                 </div>
               )

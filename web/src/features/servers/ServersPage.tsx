@@ -99,7 +99,7 @@ export function ServersPage() {
                       onSelect: () => serverAction.mutate({ id: server.id, action: 'refresh' }),
                     },
                     {
-                      label: 'restart',
+                      label: t('server.restart'),
                       onSelect: () => serverAction.mutate({ id: server.id, action: 'restart' }),
                     },
                     { label: t('common.edit'), onSelect: () => openEdit(server) },

@@ -93,7 +93,7 @@ export function CredentialsPage() {
                     ...(credential.type === 'oauth'
                       ? [
                           {
-                            label: 'authorize',
+                            label: t('credential.authorize'),
                             onSelect: () => setAuthTarget(credential),
                           },
                         ]
@@ -116,7 +116,7 @@ export function CredentialsPage() {
                     ...(credential.type === 'oauth'
                       ? [
                           {
-                            label: 'revoke',
+                            label: t('credential.revoke'),
                             onSelect: () =>
                               revokeCredential.mutate(
                                 credential.id,

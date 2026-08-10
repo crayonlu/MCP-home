@@ -35,16 +35,16 @@ export function MarketPage() {
 
   const remove = async (entry: MarketEntry) => {
     const ok = await confirm({
-      title: 'uninstall',
-      description: `Uninstall ${entry.name}? Its server and credential will be removed.`,
-      confirmLabel: 'uninstall',
+      title: t('market.uninstall'),
+      description: t('market.uninstallConfirm', { name: entry.name }),
+      confirmLabel: t('market.uninstall'),
       danger: true,
     })
     if (!ok) return
     uninstall.mutate(
       { id: entry.id },
       {
-        onSuccess: () => toast(`✗ ${entry.name} uninstalled`, 'success'),
+        onSuccess: () => toast(`✗ ${entry.name} ${t('market.uninstall')}`, 'success'),
         onError: (error) => toast(error.message, 'error'),
       },
     )
@@ -53,7 +53,7 @@ export function MarketPage() {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold tracking-[-0.02em]">Market</h1>
+        <h1 className="text-xl font-semibold tracking-[-0.02em]">{t('market.title')}</h1>
       </div>
 
       {isLoading ? (
@@ -70,9 +70,9 @@ export function MarketPage() {
                   <div className="flex items-center gap-2">
                     <span className="truncate text-sm font-medium text-ink">{entry.name}</span>
                     {entry.kind === 'remote' ? (
-                      <Badge tone="accent">remote</Badge>
+                      <Badge tone="accent">{t('market.remote')}</Badge>
                     ) : (
-                      <Badge tone="neutral">stdio</Badge>
+                      <Badge tone="neutral">{t('market.stdio')}</Badge>
                     )}
                   </div>
                   <div className="mt-0.5 text-xs text-ink-3">
@@ -92,12 +92,12 @@ export function MarketPage() {
                 {entry.installed ? (
                   <Button variant="ghost" size="sm" onClick={() => remove(entry)}>
                     <Trash2 className="size-3.5" />
-                    uninstall
+                    {t('market.uninstall')}
                   </Button>
                 ) : (
                   <Button variant="primary" size="sm" onClick={() => setInstallTarget(entry)}>
                     <Plug className="size-3.5" />
-                    install
+                    {t('market.install')}
                   </Button>
                 )}
                 {entry.installed && (
@@ -106,7 +106,7 @@ export function MarketPage() {
                     size="sm"
                     onClick={() => navigate(`/servers?slug=${entry.id}`)}
                   >
-                    open
+                    {t('market.open')}
                   </Button>
                 )}
               </div>

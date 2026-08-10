@@ -50,7 +50,7 @@ export function DashboardPage() {
         <h1 className="text-xl font-semibold tracking-[-0.02em]">{t('nav.overview')}</h1>
         <div className="mt-1.5 flex items-center gap-2 text-[13px] text-ink-3">
           <StatusDot tone={overview.ok ? 'success' : 'danger'} />
-          {overview.ok ? 'operational' : 'degraded'}
+          {overview.ok ? t('common.operational') : t('common.degraded')}
         </div>
       </div>
 
@@ -76,7 +76,7 @@ export function DashboardPage() {
         />
         <StatCard
           label={t('nav.diagnostics')}
-          value={overview.ok ? 'ok' : 'degraded'}
+          value={overview.ok ? t('common.operational') : t('common.degraded')}
           icon={Activity}
           to="/diagnostics"
           tone={overview.ok ? 'success' : 'danger'}
@@ -84,7 +84,7 @@ export function DashboardPage() {
       </div>
 
       <div className="flex flex-col gap-2 bg-surface px-4 py-4">
-        <div className="text-[13px] font-medium text-ink-3">MCP endpoint</div>
+        <div className="text-[13px] font-medium text-ink-3">{t('dashboard.endpoint')}</div>
         <div className="flex items-center gap-2">
           <code className="min-w-0 flex-1 truncate font-mono text-sm text-ink">
             {endpoints.aggregate}

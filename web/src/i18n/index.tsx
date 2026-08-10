@@ -16,7 +16,7 @@ function resolveInitial(): Locale {
 interface I18nValue {
   locale: Locale
   setLocale: (locale: Locale) => void
-  t: (key: string) => string
+  t: (key: string, params?: Record<string, string | number>) => string
 }
 
 const I18nContext = createContext<I18nValue>({
@@ -38,7 +38,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     document.documentElement.lang = locale === 'zh' ? 'zh-CN' : 'en'
   }, [locale])
 
-  const t = (key: string) => dicts[locale][key] ?? key
+  const t = (key: string, params?: Record<string, string | number>) => {
+    const template = dicts[locale][key] ?? key
+    if (!params) return template
+    return template.replace(/\{(\w+)\}/g, (_, name: string) => String(params[name] ?? `{${name}}`))
+  }
 
   return (
     <I18nContext.Provider value={{ locale, setLocale, t }}>{children}</I18nContext.Provider>

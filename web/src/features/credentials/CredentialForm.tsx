@@ -114,7 +114,7 @@ export function CredentialFormSheet({
           />
         )}
         {type === 'oauth' && (
-          <p className="text-[13px] text-ink-3">create an empty oauth credential, then authorize</p>
+          <p className="text-[13px] text-ink-3">{t('credential.oauthHint')}</p>
         )}
       </FieldGroup>
       <div className="mt-5 flex justify-end gap-2">
