@@ -102,6 +102,16 @@ Put an HTTPS reverse proxy in front of MCP Home in production. OAuth callbacks, 
 
 npm packages for Home-hosted stdio servers are installed by the **Market** into the data volume (`MCP_HOME_MARKET_DIR`, default `<dataDir>/market`) — no Dockerfile changes needed. Don't run arbitrary npm packages in the container: use the Market's curated catalog instead.
 
+## CI/CD
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push to main or tag:
+
+1. **test**: server check + test, web typecheck + test
+2. **docker**: build dists -> `docker build` -> push `ghcr.io/crayonlu/mcp-home:latest` (tags also get `:v*`)
+3. **deploy**: SSH to server `docker compose pull && up -d`
+
+Deployment requires three GitHub Secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_KEY` (SSH private key). The GHCR package must be set to Public (after first push, in Package Settings).
+
 ## Market
 
 The Market ships a curated catalog of common MCP servers and installs them with one command, creating the Credential and Server for you:

@@ -102,6 +102,16 @@ docker compose up -d --build
 
 Home-hosted stdio Server 的 npm 包通过 **Market** 安装到数据卷（`MCP_HOME_MARKET_DIR`，默认 `<dataDir>/market`），无需修改 Dockerfile。不要在容器内直接运行任意 npm 包：请通过 Market 的 curated 目录安装。
 
+## CI/CD
+
+GitHub Actions（`.github/workflows/ci.yml`）在 push 到 main 或打 tag 时自动执行：
+
+1. **test**：服务端 check + test，前端 typecheck + test
+2. **docker**：构建 dist -> `docker build` -> 推送 `ghcr.io/crayonlu/mcp-home:latest`（tag 额外打 `:v*` 版本标签）
+3. **deploy**：SSH 到服务器 `docker compose pull && up -d`
+
+部署需要三个 GitHub Secret：`DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_KEY`（SSH 私钥）。GHCR 镜像包需设为 Public（首次推送后在 Package Settings 里改）。
+
 ## Market
 
 Market 提供 curated 的常用 MCP 目录，一键安装并自动创建 Credential 与 Server：
