@@ -1,31 +1,24 @@
 import {
+  Database,
+  FileText,
   Gauge,
-  KeyRound,
-  LogOut,
-  ScrollText,
-  Server,
-  Settings,
+  Gear,
+  Key,
+  PlugsConnected,
+  Scroll,
   ShieldCheck,
-  Waypoints,
-  type LucideIcon,
-} from 'lucide-react';
+  SignOut,
+} from '@phosphor-icons/react';
 import type { ReactNode } from 'react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
+import { DropdownMenu, Sidebar } from '@cloudflare/kumo';
 import type { Route } from '@/lib/hooks';
 
-const NAV: Array<{ id: Route; label: string; icon: LucideIcon }> = [
-  { id: 'overview', label: 'Overview', icon: Gauge },
-  { id: 'servers', label: 'Servers', icon: Server },
-  { id: 'credentials', label: 'Credentials', icon: ShieldCheck },
-  { id: 'keys', label: 'Keys', icon: KeyRound },
-  { id: 'logs', label: 'Logs', icon: ScrollText },
+const NAV: Array<{ id: Route; label: string; icon: ReactNode }> = [
+  { id: 'overview', label: 'Overview', icon: <Gauge size={18} /> },
+  { id: 'servers', label: 'Servers', icon: <Database size={18} /> },
+  { id: 'credentials', label: 'Credentials', icon: <ShieldCheck size={18} /> },
+  { id: 'keys', label: 'Keys', icon: <Key size={18} /> },
+  { id: 'logs', label: 'Logs', icon: <Scroll size={18} /> },
 ];
 
 export function AppShell({
@@ -40,65 +33,66 @@ export function AppShell({
   children: ReactNode;
 }) {
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground">
-      <aside className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-sidebar-border bg-sidebar py-3 lg:w-56 lg:items-stretch lg:px-3">
-        <button
-          onClick={() => onNavigate('overview')}
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 lg:px-3"
-        >
-          <Waypoints className="size-5 shrink-0 text-foreground" strokeWidth={1.7} />
-          <span className="hidden text-sm font-semibold lg:inline">MCP Home</span>
-        </button>
+    <Sidebar.Provider contained defaultOpen collapsible="icon" className="h-screen">
+      <Sidebar>
+        <Sidebar.Header>
+          <button
+            onClick={() => onNavigate('overview')}
+            className="flex items-center gap-2 px-2 py-1.5"
+          >
+            <PlugsConnected className="size-5 text-kumo-strong" />
+            <span className="text-sm font-semibold text-kumo-strong">MCP Home</span>
+          </button>
+        </Sidebar.Header>
 
-        <nav className="mt-2 flex flex-1 flex-col gap-0.5">
-          {NAV.map((item) => {
-            const Icon = item.icon;
-            const active = route === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => onNavigate(item.id)}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'flex items-center justify-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors lg:justify-start lg:px-3',
-                  active
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-foreground',
-                )}
+        <Sidebar.Content>
+          <Sidebar.Group>
+            <Sidebar.Menu>
+              {NAV.map((item) => (
+                <Sidebar.MenuButton
+                  key={item.id}
+                  icon={item.icon}
+                  tooltip={item.label}
+                  active={route === item.id}
+                  href={`#/${item.id}`}
+                />
+              ))}
+            </Sidebar.Menu>
+          </Sidebar.Group>
+        </Sidebar.Content>
+
+        <Sidebar.Footer>
+          <DropdownMenu>
+            <DropdownMenu.Trigger
+              render={
+                <Sidebar.MenuButton icon={<Gear size={18} />} tooltip="System">
+                  System
+                </Sidebar.MenuButton>
+              }
+            />
+            <DropdownMenu.Content side="top" align="start">
+              <DropdownMenu.LinkItem
+                href="/api/v1/openapi.json"
+                target="_blank"
+                icon={<FileText size={16} />}
               >
-                <Icon className="size-4 shrink-0" strokeWidth={1.8} />
-                <span className="hidden lg:inline">{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              className="flex items-center justify-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-sidebar-accent/50 hover:text-foreground lg:justify-start lg:px-3"
-              aria-label="System"
-            >
-              <Settings className="size-4 shrink-0" strokeWidth={1.8} />
-              <span className="hidden lg:inline">System</span>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent side="top" align="start" className="mb-1 w-48">
-            <DropdownMenuItem asChild>
-              <a href="/api/v1/openapi.json" target="_blank" rel="noreferrer">
                 OpenAPI spec
-              </a>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => void onLogout()} className="text-red-400 focus:text-red-300">
-              <LogOut className="size-4" />
-              退出登录
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </aside>
+              </DropdownMenu.LinkItem>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item
+                variant="danger"
+                icon={<SignOut size={16} />}
+                onClick={() => void onLogout()}
+              >
+                退出登录
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu>
+          <Sidebar.Trigger />
+        </Sidebar.Footer>
+      </Sidebar>
 
       <main className="flex min-w-0 flex-1 flex-col">{children}</main>
-    </div>
+    </Sidebar.Provider>
   );
 }

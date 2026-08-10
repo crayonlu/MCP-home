@@ -1,39 +1,32 @@
+import {
+  ArrowClockwise,
+  DotsThreeVertical,
+  Key,
+  PencilSimple,
+  Plus,
+  Trash,
+} from '@phosphor-icons/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { KeyRound, MoreHorizontal, Plus, RefreshCw, Trash2 } from 'lucide-react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
+  Badge,
+  Button,
+  Dialog,
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Table,
+} from '@cloudflare/kumo';
+import { z } from 'zod';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { StatusDot } from '@/components/shared/StatusDot';
+import { StatusLabel } from '@/components/shared/StatusDot';
 import { api, apiVoid, errorMessage } from '@/lib/api';
 import {
   authorizationResultSchema,
   credentialRecordSchema,
   type CredentialRecord,
 } from '@/lib/contracts';
-import { useResource } from '@/lib/hooks';
+import { useResource, useToast } from '@/lib/hooks';
 import { relativeDate } from '@/lib/format';
-import { z } from 'zod';
-import { CredentialFormSheet } from './credential-form';
+import { CredentialFormDialog } from './credential-form';
 
 const testSchema = z.object({ valid: z.boolean() }).passthrough();
 
@@ -41,11 +34,15 @@ export function CredentialsPage() {
   const list = useResource('/api/v1/credentials', credentialRecordSchema.array());
   const [editing, setEditing] = useState<CredentialRecord | null | 'new'>(null);
   const [deleting, setDeleting] = useState<CredentialRecord | null>(null);
+  const toast = useToast();
   const pollRef = useRef<number | null>(null);
 
-  useEffect(() => () => {
-    if (pollRef.current) window.clearInterval(pollRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (pollRef.current) window.clearInterval(pollRef.current);
+    },
+    [],
+  );
 
   const reload = list.reload;
 
@@ -68,18 +65,8 @@ export function CredentialsPage() {
         }
       }, 2500);
     },
-    [reload],
+    [reload, toast],
   );
-
-  const runAction = async (c: CredentialRecord, action: string, label: string) => {
-    try {
-      await apiVoid(`/api/v1/credentials/${c.id}/${action}`, { method: 'POST' });
-      toast.success(`${c.name} · ${label}`);
-      reload();
-    } catch (cause) {
-      toast.error(`${c.name} 操作失败`, { description: errorMessage(cause) });
-    }
-  };
 
   const authorize = async (c: CredentialRecord) => {
     try {
@@ -95,118 +82,149 @@ export function CredentialsPage() {
         reload();
       }
     } catch (cause) {
-      toast.error('授权失败', { description: errorMessage(cause) });
+      toast.error('授权失败', errorMessage(cause));
     }
   };
 
   const test = async (c: CredentialRecord) => {
     try {
       const res = await api(`/api/v1/credentials/${c.id}/test`, testSchema, { method: 'POST' });
-      toast[res.valid ? 'success' : 'error'](`${c.name} · ${res.valid ? '验证通过' : '验证失败'}`);
+      if (res.valid) toast.success(`${c.name} · 验证通过`);
+      else toast.error(`${c.name} · 验证失败`);
     } catch (cause) {
-      toast.error(`${c.name} 验证失败`, { description: errorMessage(cause) });
+      toast.error(`${c.name} 验证失败`, errorMessage(cause));
     }
   };
 
   return (
     <>
       <PageHeader title="Credentials">
-        <Button size="sm" onClick={() => setEditing('new')}>
-          <Plus className="size-4" />
-          添加
+        <Button variant="primary" size="sm" onClick={() => setEditing('new')}>
+          <Plus size={16} /> 添加
         </Button>
       </PageHeader>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4">
         {list.error ? (
-          <div className="text-sm text-red-400">{list.error}</div>
+          <div className="text-sm text-kumo-danger">{list.error}</div>
         ) : list.loading && !list.data ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full" />
+              <div key={i} className="h-10 animate-pulse rounded bg-kumo-tint" />
             ))}
           </div>
         ) : !list.data || list.data.length === 0 ? (
           <EmptyState
             title="还没有 Credential"
-            hint="为上游 MCP Server 创建 Bearer / API Key / OAuth 凭据。"
-            action={
-              <Button size="sm" onClick={() => setEditing('new')}>
-                <Plus className="size-4" /> 添加 Credential
+            description="为上游 MCP Server 创建 Bearer / API Key / OAuth 凭据。"
+            contents={
+              <Button variant="primary" size="sm" onClick={() => setEditing('new')}>
+                <Plus size={16} /> 添加 Credential
               </Button>
             }
           />
         ) : (
-          <div className="overflow-hidden rounded-lg border border-border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/30">
-                <tr className="text-left text-xs text-muted-foreground">
-                  <th className="w-6 px-4 py-2" />
-                  <th className="px-4 py-2 font-medium">名称</th>
-                  <th className="px-4 py-2 font-medium">类型</th>
-                  <th className="px-4 py-2 font-medium">状态</th>
-                  <th className="px-4 py-2 font-medium">过期</th>
-                  <th className="w-8 px-4 py-2" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+          <div className="overflow-hidden rounded-lg border border-kumo-line">
+            <Table>
+              <Table.Header variant="compact">
+                <Table.Row>
+                  <Table.Head />
+                  <Table.Head>名称</Table.Head>
+                  <Table.Head>类型</Table.Head>
+                  <Table.Head>状态</Table.Head>
+                  <Table.Head>过期</Table.Head>
+                  <Table.Head />
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
                 {list.data.map((c) => (
-                  <tr key={c.id} className="hover:bg-muted/20">
-                    <td className="px-4 py-2.5"><StatusDot status={c.status} /></td>
-                    <td className="px-4 py-2.5 font-medium">{c.name}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge variant="outline" className="text-[10px] text-muted-foreground">{c.type}</Badge>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">{c.status}</td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                  <Table.Row key={c.id}>
+                    <Table.Cell>
+                      <StatusLabel status={c.status} />
+                    </Table.Cell>
+                    <Table.Cell className="font-medium">{c.name}</Table.Cell>
+                    <Table.Cell>
+                      <Badge variant="neutral" className="text-[10px]">
+                        {c.type}
+                      </Badge>
+                    </Table.Cell>
+                    <Table.Cell className="text-xs text-kumo-subtle">{c.status}</Table.Cell>
+                    <Table.Cell className="text-xs text-kumo-subtle">
                       {c.expiresAt ? relativeDate(c.expiresAt) : '—'}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
+                    </Table.Cell>
+                    <Table.Cell className="text-right">
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon-xs" aria-label="操作">
-                            <MoreHorizontal className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuItem onSelect={() => void test(c)}>
-                            <RefreshCw className="size-4" /> 验证
-                          </DropdownMenuItem>
+                        <DropdownMenu.Trigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              shape="square"
+                              size="xs"
+                              icon={<DotsThreeVertical size={16} />}
+                              aria-label="操作"
+                            />
+                          }
+                        />
+                        <DropdownMenu.Content align="end">
+                          <DropdownMenu.Item
+                            icon={<ArrowClockwise size={16} />}
+                            onClick={() => void test(c)}
+                          >
+                            验证
+                          </DropdownMenu.Item>
                           {c.type === 'oauth' && (
-                            <DropdownMenuItem onSelect={() => void authorize(c)}>
-                              <KeyRound className="size-4" /> 授权
-                            </DropdownMenuItem>
+                            <DropdownMenu.Item
+                              icon={<Key size={16} />}
+                              onClick={() => void authorize(c)}
+                            >
+                              授权
+                            </DropdownMenu.Item>
                           )}
                           {c.type === 'oauth' && c.status !== 'ready' && (
-                            <DropdownMenuItem
-                              className="text-amber-300 focus:text-amber-200"
-                              onSelect={() => void runAction(c, 'revoke', '已撤销')}
+                            <DropdownMenu.Item
+                              variant="danger"
+                              icon={<ArrowClockwise size={16} />}
+                              onClick={async () => {
+                                try {
+                                  await apiVoid(`/api/v1/credentials/${c.id}/revoke`, {
+                                    method: 'POST',
+                                  });
+                                  toast.success(`${c.name} · 已撤销`);
+                                  reload();
+                                } catch (cause) {
+                                  toast.error('撤销失败', errorMessage(cause));
+                                }
+                              }}
                             >
-                              <RefreshCw className="size-4" /> 撤销
-                            </DropdownMenuItem>
+                              撤销
+                            </DropdownMenu.Item>
                           )}
-                          <DropdownMenuItem onSelect={() => setEditing(c)}>
-                            <MoreHorizontal className="size-4" /> 编辑
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-red-400 focus:text-red-300"
-                            onSelect={() => setDeleting(c)}
+                          <DropdownMenu.Item
+                            icon={<PencilSimple size={16} />}
+                            onClick={() => setEditing(c)}
                           >
-                            <Trash2 className="size-4" /> 删除
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
+                            编辑
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Separator />
+                          <DropdownMenu.Item
+                            variant="danger"
+                            icon={<Trash size={16} />}
+                            onClick={() => setDeleting(c)}
+                          >
+                            删除
+                          </DropdownMenu.Item>
+                        </DropdownMenu.Content>
                       </DropdownMenu>
-                    </td>
-                  </tr>
+                    </Table.Cell>
+                  </Table.Row>
                 ))}
-              </tbody>
-            </table>
+              </Table.Body>
+            </Table>
           </div>
         )}
       </div>
 
-      <CredentialFormSheet
+      <CredentialFormDialog
         key={editing === 'new' ? 'new' : (editing?.id ?? 'closed')}
         open={editing !== null}
         credential={editing === 'new' ? null : editing}
@@ -218,16 +236,17 @@ export function CredentialsPage() {
         }}
       />
 
-      <AlertDialog open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>删除 {deleting?.name}?</AlertDialogTitle>
-            <AlertDialogDescription>凭据将被永久删除,绑定它的 Server 需重新配置。</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
+      <Dialog.Root open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
+        <Dialog size="sm" className="p-6">
+          <Dialog.Title className="text-base font-semibold">删除 {deleting?.name}?</Dialog.Title>
+          <Dialog.Description className="text-kumo-subtle">
+            凭据将被永久删除,绑定它的 Server 需重新配置。
+          </Dialog.Description>
+          <div className="mt-6 flex justify-end gap-2">
+            <Dialog.Close render={<Button variant="secondary" size="sm">取消</Button>} />
+            <Button
+              variant="destructive"
+              size="sm"
               onClick={async () => {
                 if (!deleting) return;
                 try {
@@ -236,15 +255,15 @@ export function CredentialsPage() {
                   setDeleting(null);
                   reload();
                 } catch (cause) {
-                  toast.error('删除失败', { description: errorMessage(cause) });
+                  toast.error('删除失败', errorMessage(cause));
                 }
               }}
             >
               删除
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </div>
+        </Dialog>
+      </Dialog.Root>
     </>
   );
 }

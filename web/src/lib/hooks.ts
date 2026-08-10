@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useKumoToastManager } from '@cloudflare/kumo';
 import type { z } from 'zod';
 import { api, errorMessage } from '@/lib/api';
 
@@ -9,10 +10,6 @@ export interface Resource<T> {
   reload: () => void;
 }
 
-/**
- * Fetch + optional polling wrapper around the typed `api()` client.
- * Pass `null` for path to pause fetching (e.g. when a sheet is closed).
- */
 export function useResource<T>(
   path: string | null,
   schema: z.ZodType<T>,
@@ -59,6 +56,18 @@ export function useResource<T>(
   }, [path, options?.pollMs]);
 
   return { data, error, loading, reload };
+}
+
+export function useToast() {
+  const manager = useKumoToastManager();
+  return {
+    success: (title: string, description?: string) =>
+      manager.add({ title, ...(description ? { description } : {}), variant: 'success' }),
+    error: (title: string, description?: string) =>
+      manager.add({ title, ...(description ? { description } : {}), variant: 'error' }),
+    message: (title: string, description?: string) =>
+      manager.add({ title, ...(description ? { description } : {}) }),
+  };
 }
 
 export type Route = 'overview' | 'servers' | 'credentials' | 'keys' | 'logs';

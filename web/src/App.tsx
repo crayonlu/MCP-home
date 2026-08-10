@@ -1,10 +1,7 @@
-import { Loader2 } from 'lucide-react';
+import { Button, Loader, Toasty, TooltipProvider } from '@cloudflare/kumo';
 import { useCallback, useEffect, useState } from 'react';
-import { Toaster } from '@/components/ui/sonner';
-import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppShell } from '@/components/layout/AppShell';
 import { LoginScreen } from '@/components/LoginScreen';
-import { Button } from '@/components/ui/button';
 import { ApiError, api, errorMessage, logout } from '@/lib/api';
 import { overviewSchema } from '@/lib/contracts';
 import { useHashRoute } from '@/lib/hooks';
@@ -37,30 +34,27 @@ export function App() {
     void checkSession();
   }, [checkSession]);
 
+  let content;
   if (authed === null && sessionError) {
-    return (
-      <div className="flex min-h-screen w-screen flex-col items-center justify-center gap-3 bg-background px-4 text-center">
-        <p className="text-sm font-medium text-foreground">无法连接 MCP Home</p>
-        <p className="max-w-md text-xs text-muted-foreground">{sessionError}</p>
-        <Button variant="outline" size="sm" onClick={() => void checkSession()}>
+    content = (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-4 text-center">
+        <p className="text-sm font-medium text-kumo-strong">无法连接 MCP Home</p>
+        <p className="max-w-md text-xs text-kumo-subtle">{sessionError}</p>
+        <Button variant="secondary" size="sm" onClick={() => void checkSession()}>
           重试
         </Button>
       </div>
     );
-  }
-
-  if (authed === null) {
-    return (
-      <div className="flex min-h-screen w-screen items-center justify-center bg-background">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+  } else if (authed === null) {
+    content = (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader />
       </div>
     );
-  }
-
-  if (!authed) return <LoginScreen onSuccess={() => setAuthed(true)} />;
-
-  return (
-    <TooltipProvider delayDuration={250}>
+  } else if (!authed) {
+    content = <LoginScreen onSuccess={() => setAuthed(true)} />;
+  } else {
+    content = (
       <AppShell
         route={route}
         onNavigate={go}
@@ -78,7 +72,12 @@ export function App() {
         {route === 'keys' && <KeysPage />}
         {route === 'logs' && <LogsPage />}
       </AppShell>
-      <Toaster />
-    </TooltipProvider>
+    );
+  }
+
+  return (
+    <Toasty>
+      <TooltipProvider>{content}</TooltipProvider>
+    </Toasty>
   );
 }

@@ -1,23 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Button, Dialog, Input, InputArea, Select, Switch } from '@cloudflare/kumo';
 import { api, errorMessage } from '@/lib/api';
 import { serverRecordSchema, type CredentialRecord, type ServerRecord } from '@/lib/contracts';
 
@@ -25,7 +7,7 @@ type Kind = 'remote' | 'home';
 type ProtocolMode = 'auto' | 'legacy' | 'modern';
 type Restart = 'never' | 'on-failure' | 'always';
 
-export function ServerFormSheet({
+export function ServerFormDialog({
   open,
   onOpenChange,
   server,
@@ -55,6 +37,11 @@ export function ServerFormSheet({
   const compatible = credentials.filter((c) =>
     kind === 'remote' ? c.type !== 'env' : c.type === 'env',
   );
+  const credentialItems: Record<string, string> = {
+    none: '无',
+    ...Object.fromEntries(compatible.map((c) => [c.id, `${c.name} · ${c.type}`])),
+  };
+  const transport = server?.transport;
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -62,7 +49,7 @@ export function ServerFormSheet({
     setSaving(true);
     try {
       const form = new FormData(e.currentTarget);
-      const transport =
+      const builtTransport =
         kind === 'remote'
           ? {
               type: 'streamable-http' as const,
@@ -84,7 +71,7 @@ export function ServerFormSheet({
             };
       const common = {
         name: required(form, 'name'),
-        transport,
+        transport: builtTransport,
         credentialId: credentialId === 'none' ? null : credentialId,
         enabled,
         settings: {
@@ -112,198 +99,163 @@ export function ServerFormSheet({
     }
   };
 
-  const transport = server?.transport;
-
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
-        <SheetHeader>
-          <SheetTitle>{editing ? '编辑 Server' : '添加 Server'}</SheetTitle>
-          <SheetDescription>{editing ? server!.name : '配置上游 MCP Server'}</SheetDescription>
-        </SheetHeader>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog size="xl" className="max-h-[88vh] overflow-y-auto p-6">
+        <Dialog.Title className="mb-1 text-base font-semibold">
+          {editing ? '编辑 Server' : '添加 Server'}
+        </Dialog.Title>
+        <Dialog.Description className="text-kumo-subtle">
+          {editing ? server!.name : '配置上游 MCP Server'}
+        </Dialog.Description>
 
-        <form onSubmit={(e) => void submit(e)} className="flex flex-1 flex-col gap-4 px-4">
-          <div className="grid grid-cols-2 gap-3 pt-2">
-            <Field label="名称">
-              <Input name="name" defaultValue={server?.name} placeholder="GitHub" required />
-            </Field>
-            <Field label="Slug">
-              <Input
-                name="slug"
-                defaultValue={server?.slug}
-                placeholder="github"
-                pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                disabled={editing}
-                required
-              />
-            </Field>
+        <form onSubmit={(e) => void submit(e)} className="mt-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="名称" name="name" defaultValue={server?.name} placeholder="GitHub" required />
+            <Input
+              label="Slug"
+              name="slug"
+              defaultValue={server?.slug}
+              placeholder="github"
+              pattern="[a-z0-9]+(-[a-z0-9]+)*"
+              disabled={editing}
+              required
+            />
           </div>
 
           {!editing && (
-            <Field label="运行位置">
-              <Select value={kind} onValueChange={(v) => setKind(v as Kind)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="remote">Remote-native</SelectItem>
-                  <SelectItem value="home">Home-hosted</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
+            <Select
+              label="运行位置"
+              size="sm"
+              value={kind}
+              onValueChange={(v) => setKind((v ?? 'remote') as Kind)}
+              items={{ remote: 'Remote-native', home: 'Home-hosted' }}
+            />
           )}
-          {kind === 'remote' && (
-            <Field label="Streamable HTTP URL">
+
+          {kind === 'remote' ? (
+            <>
               <Input
+                label="Streamable HTTP URL"
                 name="url"
                 type="url"
+                size="sm"
                 defaultValue={transport?.type === 'streamable-http' ? transport.url : ''}
                 placeholder="https://mcp.example.com/mcp"
                 required
               />
-            </Field>
-          )}
-          {kind === 'remote' && (
-            <Field label="静态 Headers (JSON)">
-              <Textarea
+              <InputArea
+                label="静态 Headers (JSON)"
                 name="headers"
+                size="sm"
                 rows={2}
                 defaultValue={
-                  transport?.type === 'streamable-http' ? JSON.stringify(transport.headers, null, 2) : '{}'
+                  transport?.type === 'streamable-http'
+                    ? JSON.stringify(transport.headers, null, 2)
+                    : '{}'
                 }
-                className="font-mono text-xs"
               />
-            </Field>
-          )}
-          {kind === 'home' && (
+              <Switch
+                label="SSE fallback"
+                size="sm"
+                checked={sseFallback}
+                onCheckedChange={setSseFallback}
+              />
+            </>
+          ) : (
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Command">
-                <Input
-                  name="command"
-                  defaultValue={transport?.type === 'stdio' ? transport.command : ''}
-                  placeholder="npx"
-                  required
-                />
-              </Field>
-              <Field label="Working dir">
-                <Input
-                  name="cwd"
-                  defaultValue={transport?.type === 'stdio' ? transport.cwd : ''}
-                  placeholder="可选"
-                />
-              </Field>
+              <Input
+                label="Command"
+                name="command"
+                size="sm"
+                defaultValue={transport?.type === 'stdio' ? transport.command : ''}
+                placeholder="npx"
+                required
+              />
+              <Input
+                label="Working dir"
+                name="cwd"
+                size="sm"
+                defaultValue={transport?.type === 'stdio' ? transport.cwd : ''}
+                placeholder="可选"
+              />
               <div className="col-span-2">
-                <Field label="Arguments (每行一个)">
-                  <Textarea
-                    name="args"
-                    rows={3}
-                    defaultValue={transport?.type === 'stdio' ? transport.args.join('\n') : ''}
-                    className="font-mono text-xs"
-                  />
-                </Field>
+                <InputArea
+                  label="Arguments (每行一个)"
+                  name="args"
+                  size="sm"
+                  rows={3}
+                  defaultValue={transport?.type === 'stdio' ? transport.args.join('\n') : ''}
+                />
               </div>
               <div className="col-span-2">
-                <Field label="Environment (JSON)">
-                  <Textarea
-                    name="env"
-                    rows={3}
-                    defaultValue={transport?.type === 'stdio' ? JSON.stringify(transport.env, null, 2) : '{}'}
-                    className="font-mono text-xs"
-                  />
-                </Field>
+                <InputArea
+                  label="Environment (JSON)"
+                  name="env"
+                  size="sm"
+                  rows={3}
+                  defaultValue={
+                    transport?.type === 'stdio' ? JSON.stringify(transport.env, null, 2) : '{}'
+                  }
+                />
               </div>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="协议协商">
-              <Select value={protocolMode} onValueChange={(v) => setProtocolMode(v as ProtocolMode)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auto">Auto</SelectItem>
-                  <SelectItem value="modern">Modern</SelectItem>
-                  <SelectItem value="legacy">Legacy</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="上游 Credential">
-              <Select value={credentialId} onValueChange={setCredentialId}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">无</SelectItem>
-                  {compatible.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name} · {c.type}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+            <Select
+              label="协议协商"
+              size="sm"
+              value={protocolMode}
+              onValueChange={(v) => setProtocolMode((v ?? 'auto') as ProtocolMode)}
+              items={{ auto: 'Auto', modern: 'Modern', legacy: 'Legacy' }}
+            />
+            <Select
+              label="上游 Credential"
+              size="sm"
+              value={credentialId}
+              onValueChange={(v) => setCredentialId(v ?? 'none')}
+              items={credentialItems}
+            />
           </div>
 
-          <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-            <div>
-              <div className="text-sm">启用</div>
-              <div className="text-xs text-muted-foreground">允许 Harness 访问</div>
-            </div>
-            <Switch checked={enabled} onCheckedChange={setEnabled} />
-          </div>
-          {kind === 'remote' && (
-            <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-              <div>
-                <div className="text-sm">SSE fallback</div>
-                <div className="text-xs text-muted-foreground">Streamable HTTP 失败后回退</div>
-              </div>
-              <Switch checked={sseFallback} onCheckedChange={setSseFallback} />
-            </div>
-          )}
+          <Switch
+            label="启用 · 允许 Harness 访问"
+            size="sm"
+            checked={enabled}
+            onCheckedChange={setEnabled}
+          />
 
           <div className="grid grid-cols-4 gap-3">
-            <Field label="Connect ms">
-              <Input name="connectTimeoutMs" type="number" defaultValue={server?.settings.connectTimeoutMs ?? 15000} required />
-            </Field>
-            <Field label="Request ms">
-              <Input name="requestTimeoutMs" type="number" defaultValue={server?.settings.requestTimeoutMs ?? 60000} required />
-            </Field>
-            <Field label="Total ms">
-              <Input name="maxTotalTimeoutMs" type="number" defaultValue={server?.settings.maxTotalTimeoutMs ?? 600000} required />
-            </Field>
-            <Field label="Concurrency">
-              <Input name="maxConcurrency" type="number" min={1} defaultValue={server?.settings.maxConcurrency ?? 1} required />
-            </Field>
+            <Input label="Connect ms" name="connectTimeoutMs" type="number" size="sm" defaultValue={server?.settings.connectTimeoutMs ?? 15000} required />
+            <Input label="Request ms" name="requestTimeoutMs" type="number" size="sm" defaultValue={server?.settings.requestTimeoutMs ?? 60000} required />
+            <Input label="Total ms" name="maxTotalTimeoutMs" type="number" size="sm" defaultValue={server?.settings.maxTotalTimeoutMs ?? 600000} required />
+            <Input label="Concurrency" name="maxConcurrency" type="number" size="sm" min={1} defaultValue={server?.settings.maxConcurrency ?? 1} required />
           </div>
 
           {kind === 'home' && (
-            <Field label="Restart policy">
-              <Select value={restart} onValueChange={(v) => setRestart(v as Restart)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="on-failure">On failure</SelectItem>
-                  <SelectItem value="always">Always</SelectItem>
-                  <SelectItem value="never">Never</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
+            <Select
+              label="Restart policy"
+              size="sm"
+              value={restart}
+              onValueChange={(v) => setRestart((v ?? 'on-failure') as Restart)}
+              items={{ 'on-failure': 'On failure', always: 'Always', never: 'Never' }}
+            />
           )}
 
-          {error && <div className="text-xs text-red-400">{error}</div>}
+          {error && <div className="text-xs text-kumo-danger">{error}</div>}
 
-          <SheetFooter className="mt-auto">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
-            <Button type="submit" disabled={saving}>{saving ? '保存中…' : '保存'}</Button>
-          </SheetFooter>
+          <div className="flex justify-end gap-2 pt-2">
+            <Dialog.Close render={<Button variant="secondary" size="sm">取消</Button>} />
+            <Button variant="primary" size="sm" type="submit" loading={saving}>
+              {saving ? '保存中…' : '保存'}
+            </Button>
+          </div>
         </form>
-      </SheetContent>
-    </Sheet>
+      </Dialog>
+    </Dialog.Root>
   );
 }
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <span className={labelCls}>{label}</span>
-      {children}
-    </div>
-  );
-}
-
-const labelCls = 'text-xs font-medium text-muted-foreground';
 
 function required(form: FormData, name: string): string {
   const value = form.get(name);
@@ -322,9 +274,8 @@ function parseMap(value: string): Record<string, string> {
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new Error('JSON 必须是对象');
   }
-  const obj = parsed as Record<string, unknown>;
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(obj)) {
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
     if (typeof v !== 'string') throw new Error(`${k} 的值必须是字符串`);
     out[k] = v;
   }

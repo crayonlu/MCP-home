@@ -1,43 +1,26 @@
-import { useCallback, useEffect, useState } from 'react';
-import { toast } from 'sonner';
 import {
-  FileSearch,
-  Globe2,
-  MoreHorizontal,
-  Pencil,
+  ArrowClockwise,
+  Database,
+  DotsThreeVertical,
+  MagnifyingGlass,
+  PencilSimple,
   Play,
   Plus,
   Power,
-  RefreshCw,
-  RotateCcw,
-  Search,
-  TerminalSquare,
-  Trash2,
-} from 'lucide-react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+  Trash,
+} from '@phosphor-icons/react';
+import { useCallback, useEffect, useState } from 'react';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
+  Badge,
+  Button,
+  Dialog,
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Input,
+  Table,
+} from '@cloudflare/kumo';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { StatusDot } from '@/components/shared/StatusDot';
+import { StatusLabel } from '@/components/shared/StatusDot';
 import { api, apiVoid, errorMessage } from '@/lib/api';
 import {
   credentialRecordSchema,
@@ -46,9 +29,9 @@ import {
   type ServerRecord,
   type ServerStatus,
 } from '@/lib/contracts';
-import { useResource } from '@/lib/hooks';
+import { useResource, useToast } from '@/lib/hooks';
 import { relativeDate } from '@/lib/format';
-import { ServerFormSheet } from './server-form';
+import { ServerFormDialog } from './server-form';
 import { ServerInspect } from './server-inspect';
 
 export function ServersPage() {
@@ -59,6 +42,7 @@ export function ServersPage() {
   const [editing, setEditing] = useState<ServerRecord | null | 'new'>(null);
   const [inspecting, setInspecting] = useState<ServerStatus | null>(null);
   const [deleting, setDeleting] = useState<ServerRecord | null>(null);
+  const toast = useToast();
 
   const loadStatuses = useCallback(async (list: ServerRecord[]) => {
     const entries = await Promise.all(
@@ -88,7 +72,7 @@ export function ServersPage() {
       toast.success(`${server.name} · ${label}`);
       reload();
     } catch (cause) {
-      toast.error(`${server.name} 操作失败`, { description: errorMessage(cause) });
+      toast.error(`${server.name} 操作失败`, errorMessage(cause));
     }
   };
 
@@ -99,140 +83,158 @@ export function ServersPage() {
   return (
     <>
       <PageHeader title="Servers">
-        <div className="relative">
-          <Search className="absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索"
-            className="h-8 w-40 pl-7 text-xs"
-          />
-        </div>
-        <Button size="sm" onClick={() => setEditing('new')}>
-          <Plus className="size-4" />
-          添加
+        <Input
+          aria-label="搜索"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="搜索"
+          size="xs"
+          className="w-40"
+        />
+        <Button variant="primary" size="sm" onClick={() => setEditing('new')}>
+          <Plus size={16} /> 添加
         </Button>
       </PageHeader>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4">
         {servers.error ? (
-          <div className="text-sm text-red-400">{servers.error}</div>
+          <div className="text-sm text-kumo-danger">{servers.error}</div>
         ) : servers.loading && !servers.data ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-14 w-full" />
+              <div key={i} className="h-10 animate-pulse rounded bg-kumo-tint" />
             ))}
           </div>
         ) : !filtered || filtered.length === 0 ? (
           <EmptyState
             title={query ? '无匹配结果' : '还没有 MCP Server'}
-            hint={query ? '' : '添加一个 Remote-native 或 Home-hosted Server。'}
-            action={
+            description={query ? '' : '添加一个 Remote-native 或 Home-hosted Server。'}
+            contents={
               !query && (
-                <Button size="sm" onClick={() => setEditing('new')}>
-                  <Plus className="size-4" /> 添加 Server
+                <Button variant="primary" size="sm" onClick={() => setEditing('new')}>
+                  <Plus size={16} /> 添加 Server
                 </Button>
               )
             }
           />
         ) : (
-          <div className="overflow-hidden rounded-lg border border-border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/30">
-                <tr className="text-left text-xs text-muted-foreground">
-                  <th className="w-6 px-4 py-2" />
-                  <th className="px-4 py-2 font-medium">Server</th>
-                  <th className="px-4 py-2 font-medium">Runtime</th>
-                  <th className="px-4 py-2 font-medium">Endpoint</th>
-                  <th className="w-8 px-4 py-2" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+          <div className="overflow-hidden rounded-lg border border-kumo-line">
+            <Table>
+              <Table.Header variant="compact">
+                <Table.Row>
+                  <Table.Head />
+                  <Table.Head>Server</Table.Head>
+                  <Table.Head>Runtime</Table.Head>
+                  <Table.Head>Endpoint</Table.Head>
+                  <Table.Head />
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
                 {filtered.map((s) => {
                   const st = statuses[s.id]?.runtime ?? null;
                   const status = st?.status ?? (s.enabled ? 'unknown' : 'disabled');
                   return (
-                    <tr key={s.id} className="hover:bg-muted/20">
-                      <td className="px-4 py-2.5"><StatusDot status={status} /></td>
-                      <td className="px-4 py-2.5">
+                    <Table.Row key={s.id}>
+                      <Table.Cell>
+                        <Database size={16} className="text-kumo-subtle" />
+                      </Table.Cell>
+                      <Table.Cell>
                         <div className="flex items-center gap-2">
-                          {s.kind === 'remote' ? (
-                            <Globe2 className="size-3.5 text-muted-foreground" />
-                          ) : (
-                            <TerminalSquare className="size-3.5 text-muted-foreground" />
-                          )}
                           <span className="font-medium">{s.name}</span>
-                          <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground">
+                          <Badge variant="neutral" className="font-mono text-[10px]">
                             {s.slug}
                           </Badge>
-                          {!s.enabled && (
-                            <Badge variant="outline" className="text-[10px] text-zinc-500">停用</Badge>
-                          )}
+                          {!s.enabled && <Badge variant="neutral">停用</Badge>}
                         </div>
-                      </td>
-                      <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                        <span>{status}</span>
-                        {st?.lastSuccessAt && <span className="ml-2">{relativeDate(st.lastSuccessAt)}</span>}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <code className="font-mono text-xs text-muted-foreground">/mcp/{s.slug}</code>
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
+                      </Table.Cell>
+                      <Table.Cell>
+                        <div className="flex items-center gap-2 text-xs text-kumo-subtle">
+                          <StatusLabel status={status} />
+                          {st?.lastSuccessAt && <span>{relativeDate(st.lastSuccessAt)}</span>}
+                        </div>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <code className="font-mono text-xs text-kumo-subtle">/mcp/{s.slug}</code>
+                      </Table.Cell>
+                      <Table.Cell className="text-right">
                         <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon-xs" aria-label="操作">
-                              <MoreHorizontal className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
-                            <DropdownMenuItem
-                              onSelect={() => {
+                          <DropdownMenu.Trigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                shape="square"
+                                size="xs"
+                                icon={<DotsThreeVertical size={16} />}
+                                aria-label="操作"
+                              />
+                            }
+                          />
+                          <DropdownMenu.Content align="end">
+                            <DropdownMenu.Item
+                              icon={<MagnifyingGlass size={16} />}
+                              onClick={() => {
                                 const detail = statuses[s.id];
                                 if (detail) setInspecting(detail);
                               }}
                             >
-                              <FileSearch className="size-4" /> 详情
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => setEditing(s)}>
-                              <Pencil className="size-4" /> 编辑
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onSelect={() => void runAction(s, 'test', '已测试')}>
-                              <Play className="size-4" /> 测试连接
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => void runAction(s, 'refresh', '已刷新')}>
-                              <RefreshCw className="size-4" /> 刷新能力
-                            </DropdownMenuItem>
+                              详情
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item
+                              icon={<PencilSimple size={16} />}
+                              onClick={() => setEditing(s)}
+                            >
+                              编辑
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator />
+                            <DropdownMenu.Item
+                              icon={<Play size={16} />}
+                              onClick={() => void runAction(s, 'test', '已测试')}
+                            >
+                              测试连接
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item
+                              icon={<ArrowClockwise size={16} />}
+                              onClick={() => void runAction(s, 'refresh', '已刷新')}
+                            >
+                              刷新能力
+                            </DropdownMenu.Item>
                             {s.kind === 'home' && (
-                              <DropdownMenuItem onSelect={() => void runAction(s, 'restart', '已重启')}>
-                                <RotateCcw className="size-4" /> 重启进程
-                              </DropdownMenuItem>
+                              <DropdownMenu.Item
+                                icon={<ArrowClockwise size={16} />}
+                                onClick={() => void runAction(s, 'restart', '已重启')}
+                              >
+                                重启进程
+                              </DropdownMenu.Item>
                             )}
-                            <DropdownMenuItem
-                              onSelect={() => void runAction(s, s.enabled ? 'disable' : 'enable', s.enabled ? '已停用' : '已启用')}
+                            <DropdownMenu.Item
+                              icon={<Power size={16} />}
+                              onClick={() =>
+                                void runAction(s, s.enabled ? 'disable' : 'enable', s.enabled ? '已停用' : '已启用')
+                              }
                             >
-                              <Power className="size-4" /> {s.enabled ? '停用' : '启用'}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-red-400 focus:text-red-300"
-                              onSelect={() => setDeleting(s)}
+                              {s.enabled ? '停用' : '启用'}
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator />
+                            <DropdownMenu.Item
+                              variant="danger"
+                              icon={<Trash size={16} />}
+                              onClick={() => setDeleting(s)}
                             >
-                              <Trash2 className="size-4" /> 删除
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
+                              删除
+                            </DropdownMenu.Item>
+                          </DropdownMenu.Content>
                         </DropdownMenu>
-                      </td>
-                    </tr>
+                      </Table.Cell>
+                    </Table.Row>
                   );
                 })}
-              </tbody>
-            </table>
+              </Table.Body>
+            </Table>
           </div>
         )}
       </div>
 
-      <ServerFormSheet
+      <ServerFormDialog
         key={editing === 'new' ? 'new' : (editing?.id ?? 'closed')}
         open={editing !== null}
         server={editing === 'new' ? null : editing}
@@ -247,18 +249,17 @@ export function ServersPage() {
 
       <ServerInspect status={inspecting} onOpenChange={(o) => !o && setInspecting(null)} />
 
-      <AlertDialog open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>删除 {deleting?.name}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              配置、能力快照与运行日志将被删除,上游服务本身不受影响。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
+      <Dialog.Root open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
+        <Dialog size="sm" className="p-6">
+          <Dialog.Title className="text-base font-semibold">删除 {deleting?.name}?</Dialog.Title>
+          <Dialog.Description className="text-kumo-subtle">
+            配置、能力快照与运行日志将被删除,上游服务本身不受影响。
+          </Dialog.Description>
+          <div className="mt-6 flex justify-end gap-2">
+            <Dialog.Close render={<Button variant="secondary" size="sm">取消</Button>} />
+            <Button
+              variant="destructive"
+              size="sm"
               onClick={async () => {
                 if (!deleting) return;
                 try {
@@ -267,15 +268,15 @@ export function ServersPage() {
                   setDeleting(null);
                   reload();
                 } catch (cause) {
-                  toast.error('删除失败', { description: errorMessage(cause) });
+                  toast.error('删除失败', errorMessage(cause));
                 }
               }}
             >
               删除
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </div>
+        </Dialog>
+      </Dialog.Root>
     </>
   );
 }

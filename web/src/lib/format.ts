@@ -31,28 +31,17 @@ export function runtimeTone(status: string | null | undefined): Tone {
   }
 }
 
-export function toneDot(tone: Tone): string {
+export function badgeVariant(
+  tone: Tone,
+): 'success' | 'warning' | 'error' | 'neutral' {
   switch (tone) {
     case 'ready':
-      return 'bg-emerald-400';
+      return 'success';
     case 'pending':
-      return 'bg-amber-400';
+      return 'warning';
     case 'error':
-      return 'bg-red-400';
+      return 'error';
     default:
-      return 'bg-zinc-500';
-  }
-}
-
-export function toneText(tone: Tone): string {
-  switch (tone) {
-    case 'ready':
-      return 'text-emerald-400';
-    case 'pending':
-      return 'text-amber-400';
-    case 'error':
-      return 'text-red-400';
-    default:
-      return 'text-zinc-500';
+      return 'neutral';
   }
 }

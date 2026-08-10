@@ -1,43 +1,21 @@
+import { DotsThreeVertical, Plus } from '@phosphor-icons/react';
 import { useState, type FormEvent } from 'react';
-import { toast } from 'sonner';
-import { MoreHorizontal, Plus } from 'lucide-react';
-import { PageHeader } from '@/components/layout/PageHeader';
-import { Button } from '@/components/ui/button';
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
+  Badge,
+  Button,
+  Dialog,
   DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
-import { SecretReveal } from '@/components/shared/SecretReveal';
+  Input,
+  Table,
+} from '@cloudflare/kumo';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { EmptyState } from '@/components/shared/EmptyState';
-import { cn } from '@/lib/utils';
+import { SecretReveal } from '@/components/shared/SecretReveal';
 import { api, apiVoid, errorMessage } from '@/lib/api';
 import { apiKeyRecordSchema, issuedKeySchema, type ApiKeyRecord } from '@/lib/contracts';
-import { useResource } from '@/lib/hooks';
+import { useResource, useToast } from '@/lib/hooks';
 import { relativeDate } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 type Kind = 'access' | 'control';
 
@@ -46,105 +24,119 @@ export function KeysPage() {
   const [creating, setCreating] = useState(false);
   const [revoking, setRevoking] = useState<ApiKeyRecord | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
-
   const list = useResource(`/api/v1/${kind}-keys`, apiKeyRecordSchema.array());
-
-  const reload = () => list.reload();
+  const toast = useToast();
+  const reload = list.reload;
 
   return (
     <>
       <PageHeader title={kind === 'access' ? 'Access Keys' : 'Control Keys'}>
-        <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
+        <div className="flex items-center gap-0.5 rounded-md border border-kumo-line p-0.5">
           {(['access', 'control'] as const).map((k) => (
             <button
               key={k}
               onClick={() => setKind(k)}
               className={cn(
-                'rounded px-2.5 py-1 text-xs transition-colors',
+                'rounded px-2 py-0.5 text-xs transition-colors',
                 kind === k
-                  ? 'bg-secondary text-secondary-foreground'
-                  : 'text-muted-foreground hover:text-foreground',
+                  ? 'bg-kumo-tint text-kumo-strong'
+                  : 'text-kumo-subtle hover:text-kumo-default',
               )}
             >
               {k === 'access' ? 'Access' : 'Control'}
             </button>
           ))}
         </div>
-        <Button size="sm" onClick={() => setCreating(true)}>
-          <Plus className="size-4" />
-          新建
+        <Button variant="primary" size="sm" onClick={() => setCreating(true)}>
+          <Plus size={16} /> 新建
         </Button>
       </PageHeader>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4">
         {list.error ? (
-          <div className="text-sm text-red-400">{list.error}</div>
+          <div className="text-sm text-kumo-danger">{list.error}</div>
         ) : list.loading && !list.data ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full" />
+              <div key={i} className="h-10 animate-pulse rounded bg-kumo-tint" />
             ))}
           </div>
         ) : !list.data || list.data.length === 0 ? (
           <EmptyState
             title={`还没有 ${kind === 'access' ? 'Access' : 'Control'} Key`}
-            hint={kind === 'access' ? 'Access Key 供 Harness 连接 /mcp 端点。' : 'Control Key 用于登录控制台。'}
+            description={
+              kind === 'access'
+                ? 'Access Key 供 Harness 连接 /mcp 端点。'
+                : 'Control Key 用于登录控制台。'
+            }
           />
         ) : (
-          <div className="overflow-hidden rounded-lg border border-border">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/30">
-                <tr className="text-left text-xs text-muted-foreground">
-                  <th className="px-4 py-2 font-medium">名称</th>
-                  <th className="px-4 py-2 font-medium">前缀</th>
-                  <th className="px-4 py-2 font-medium">创建</th>
-                  <th className="px-4 py-2 font-medium">最近使用</th>
-                  <th className="px-4 py-2 font-medium">状态</th>
-                  <th className="w-8 px-4 py-2" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
+          <div className="overflow-hidden rounded-lg border border-kumo-line">
+            <Table>
+              <Table.Header variant="compact">
+                <Table.Row>
+                  <Table.Head>名称</Table.Head>
+                  <Table.Head>前缀</Table.Head>
+                  <Table.Head>创建</Table.Head>
+                  <Table.Head>最近使用</Table.Head>
+                  <Table.Head>状态</Table.Head>
+                  <Table.Head />
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
                 {list.data.map((key) => (
-                  <tr key={key.id}>
-                    <td className="px-4 py-2.5 font-medium">{key.name}</td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{key.prefix}…</td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">{relativeDate(key.createdAt)}</td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">{relativeDate(key.lastUsedAt)}</td>
-                    <td className="px-4 py-2.5">
+                  <Table.Row key={key.id}>
+                    <Table.Cell className="font-medium">{key.name}</Table.Cell>
+                    <Table.Cell className="font-mono text-xs text-kumo-subtle">
+                      {key.prefix}…
+                    </Table.Cell>
+                    <Table.Cell className="text-xs text-kumo-subtle">
+                      {relativeDate(key.createdAt)}
+                    </Table.Cell>
+                    <Table.Cell className="text-xs text-kumo-subtle">
+                      {relativeDate(key.lastUsedAt)}
+                    </Table.Cell>
+                    <Table.Cell>
                       {key.revokedAt ? (
-                        <Badge variant="outline" className="text-muted-foreground">已撤销</Badge>
+                        <Badge variant="neutral">已撤销</Badge>
                       ) : (
-                        <Badge variant="outline" className="border-emerald-400/30 text-emerald-300">活跃</Badge>
+                        <Badge variant="success">活跃</Badge>
                       )}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
+                    </Table.Cell>
+                    <Table.Cell className="text-right">
                       {!key.revokedAt && (
                         <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon-xs" aria-label="操作">
-                              <MoreHorizontal className="size-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem
-                              className="text-red-400 focus:text-red-300"
-                              onSelect={() => setRevoking(key)}
+                          <DropdownMenu.Trigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                shape="square"
+                                size="xs"
+                                icon={<DotsThreeVertical size={16} />}
+                                aria-label="操作"
+                              />
+                            }
+                          />
+                          <DropdownMenu.Content align="end">
+                            <DropdownMenu.Item
+                              variant="danger"
+                              onClick={() => setRevoking(key)}
                             >
                               撤销
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
+                            </DropdownMenu.Item>
+                          </DropdownMenu.Content>
                         </DropdownMenu>
                       )}
-                    </td>
-                  </tr>
+                    </Table.Cell>
+                  </Table.Row>
                 ))}
-              </tbody>
-            </table>
+              </Table.Body>
+            </Table>
           </div>
         )}
       </div>
 
-      <CreateKeySheet
+      <CreateKeyDialog
         kind={kind}
         open={creating}
         onOpenChange={setCreating}
@@ -161,17 +153,17 @@ export function KeysPage() {
         label={kind === 'access' ? 'Access Key' : 'Control Key'}
       />
 
-      <AlertDialog open={revoking !== null} onOpenChange={(o) => !o && setRevoking(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>撤销此 Key?</AlertDialogTitle>
-            <AlertDialogDescription>
-              撤销后该 Key 立即失效,且无法恢复。{revoking?.name}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
+      <Dialog.Root open={revoking !== null} onOpenChange={(o) => !o && setRevoking(null)}>
+        <Dialog size="sm" className="p-6">
+          <Dialog.Title className="text-base font-semibold">撤销此 Key?</Dialog.Title>
+          <Dialog.Description className="text-kumo-subtle">
+            撤销后该 Key 立即失效,且无法恢复。{revoking?.name}
+          </Dialog.Description>
+          <div className="mt-6 flex justify-end gap-2">
+            <Dialog.Close render={<Button variant="secondary" size="sm">取消</Button>} />
+            <Button
+              variant="destructive"
+              size="sm"
               onClick={async () => {
                 if (!revoking) return;
                 try {
@@ -180,20 +172,20 @@ export function KeysPage() {
                   setRevoking(null);
                   reload();
                 } catch (cause) {
-                  toast.error('撤销失败', { description: errorMessage(cause) });
+                  toast.error('撤销失败', errorMessage(cause));
                 }
               }}
             >
               撤销
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </div>
+        </Dialog>
+      </Dialog.Root>
     </>
   );
 }
 
-function CreateKeySheet({
+function CreateKeyDialog({
   kind,
   open,
   onOpenChange,
@@ -206,6 +198,7 @@ function CreateKeySheet({
 }) {
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
 
   const submit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -220,38 +213,38 @@ function CreateKeySheet({
       setName('');
       onOpenChange(false);
     } catch (cause) {
-      toast.error('创建失败', { description: errorMessage(cause) });
+      toast.error('创建失败', errorMessage(cause));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-sm">
-        <SheetHeader>
-          <SheetTitle>新建 {kind === 'access' ? 'Access' : 'Control'} Key</SheetTitle>
-          <SheetDescription>为这把 Key 命名,便于后续识别。</SheetDescription>
-        </SheetHeader>
-        <form onSubmit={(e) => void submit(e)} className="flex flex-1 flex-col gap-4 px-4">
-          <div className="space-y-1.5 pt-2">
-            <Label htmlFor="key-name">名称</Label>
-            <Input
-              id="key-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="laptop · ci · ci-prod"
-              autoFocus
-              required
-            />
-          </div>
-          <SheetFooter className="mt-auto">
-            <Button type="submit" disabled={saving}>
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog size="sm" className="p-6">
+        <Dialog.Title className="mb-1 text-base font-semibold">
+          新建 {kind === 'access' ? 'Access' : 'Control'} Key
+        </Dialog.Title>
+        <Dialog.Description className="text-kumo-subtle">为这把 Key 命名,便于后续识别。</Dialog.Description>
+        <form onSubmit={(e) => void submit(e)} className="mt-4 space-y-4">
+          <Input
+            label="名称"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="laptop · ci · ci-prod"
+            autoFocus
+            required
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)}>
+              取消
+            </Button>
+            <Button variant="primary" size="sm" type="submit" loading={saving}>
               {saving ? '创建中…' : '创建'}
             </Button>
-          </SheetFooter>
+          </div>
         </form>
-      </SheetContent>
-    </Sheet>
+      </Dialog>
+    </Dialog.Root>
   );
 }
