@@ -1,5 +1,5 @@
 import { KeyRound, Plus } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   useCreateCredential,
   useCredentials,
@@ -9,6 +9,7 @@ import {
 } from '../../app/queries'
 import { useI18n } from '../../i18n'
 import { useToast } from '../../components/ui/Toast'
+import { useConfirm } from '../../components/ui/ConfirmDialog'
 import { Button } from '../../components/ui/Button'
 import { Badge, EmptyState, StatusDot } from '../../components/ui/Badge'
 import { ActionsMenu } from '../../components/ui/Menu'
@@ -28,6 +29,7 @@ const typeTone: Record<CredentialType, 'accent' | 'neutral' | 'success' | 'warni
 export function CredentialsPage() {
   const { t, locale } = useI18n()
   const { toast } = useToast()
+  const confirm = useConfirm()
   const { data: credentials, isLoading } = useCredentials()
   const createCredential = useCreateCredential()
   const deleteCredential = useDeleteCredential()
@@ -36,6 +38,20 @@ export function CredentialsPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<CredentialRecord | undefined>(undefined)
   const [authTarget, setAuthTarget] = useState<CredentialRecord | null>(null)
+  const refreshedRef = useRef(new Set<string>())
+
+  useEffect(() => {
+    for (const credential of credentials ?? []) {
+      if (
+        credential.type === 'oauth' &&
+        credential.status === 'expired' &&
+        !refreshedRef.current.has(credential.id)
+      ) {
+        refreshedRef.current.add(credential.id)
+        testCredential.mutate({ id: credential.id })
+      }
+    }
+  }, [credentials])
 
   return (
     <div className="flex flex-col gap-5">
@@ -116,13 +132,18 @@ export function CredentialsPage() {
                     {
                       label: t('common.delete'),
                       danger: true,
-                      onSelect: () => {
-                        if (window.confirm(`${t('common.delete')} ${credential.name}?`)) {
-                          deleteCredential.mutate(
-                            { id: credential.id },
-                            { onError: (error) => toast(error.message, 'error') },
-                          )
-                        }
+                      onSelect: async () => {
+                        const ok = await confirm({
+                          title: t('common.delete'),
+                          description: `${t('common.delete')} ${credential.name}?`,
+                          confirmLabel: t('common.delete'),
+                          danger: true,
+                        })
+                        if (!ok) return
+                        deleteCredential.mutate(
+                          { id: credential.id },
+                          { onError: (error) => toast(error.message, 'error') },
+                        )
                       },
                     },
                   ]}

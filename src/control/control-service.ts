@@ -312,7 +312,7 @@ export class ControlService {
     }
     if (
       kind === 'control' &&
-      this.#store.listApiKeys('control').filter((key) => key.revokedAt === null).length <= 1
+      this.#store.listApiKeys('control').length <= 1
     ) {
       throw new AppError(
         'last_control_key',

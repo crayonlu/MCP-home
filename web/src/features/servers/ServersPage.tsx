@@ -10,6 +10,7 @@ import {
 } from '../../app/queries'
 import { useI18n } from '../../i18n'
 import { useToast } from '../../components/ui/Toast'
+import { useConfirm } from '../../components/ui/ConfirmDialog'
 import { Button } from '../../components/ui/Button'
 import { Badge, EmptyState, StatusDot } from '../../components/ui/Badge'
 import { Toggle } from '../../components/ui/Toggle'
@@ -21,6 +22,7 @@ import type { ServerRecord } from '../../api/types'
 export function ServersPage() {
   const { t, locale } = useI18n()
   const { toast } = useToast()
+  const confirm = useConfirm()
   const { data: servers, isLoading } = useServers()
   const createServer = useCreateServer()
   const updateServer = useUpdateServer()
@@ -104,13 +106,18 @@ export function ServersPage() {
                     {
                       label: t('common.delete'),
                       danger: true,
-                      onSelect: () => {
-                        if (window.confirm(`${t('common.delete')} ${server.name}?`)) {
-                          deleteServer.mutate(
-                            { id: server.id },
-                            { onError: (error) => toast(error.message, 'error') },
-                          )
-                        }
+                      onSelect: async () => {
+                        const ok = await confirm({
+                          title: t('common.delete'),
+                          description: `${t('common.delete')} ${server.name}?`,
+                          confirmLabel: t('common.delete'),
+                          danger: true,
+                        })
+                        if (!ok) return
+                        deleteServer.mutate(
+                          { id: server.id },
+                          { onError: (error) => toast(error.message, 'error') },
+                        )
                       },
                     },
                   ]}

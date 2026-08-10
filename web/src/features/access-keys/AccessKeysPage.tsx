@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useAccessKeys, useCreateAccessKey, useRevokeAccessKey } from '../../app/queries'
 import { useI18n } from '../../i18n'
 import { useToast } from '../../components/ui/Toast'
+import { useConfirm } from '../../components/ui/ConfirmDialog'
 import { Button } from '../../components/ui/Button'
 import { CopyButton } from '../../components/ui/CopyButton'
 import { EmptyState } from '../../components/ui/Badge'
@@ -12,6 +13,7 @@ import { TextField } from '../../components/ui/Field'
 export function AccessKeysPage() {
   const { t } = useI18n()
   const { toast } = useToast()
+  const confirm = useConfirm()
   const { data: keys, isLoading } = useAccessKeys()
   const createKey = useCreateAccessKey()
   const revokeKey = useRevokeAccessKey()
@@ -53,13 +55,18 @@ export function AccessKeysPage() {
               <span className="text-xs text-ink-3">{new Date(key.createdAt).toLocaleDateString()}</span>
               <Button
                 variant="ghost"
-                onClick={() => {
-                  if (window.confirm(`${t('common.delete')} ${key.name}?`)) {
-                    revokeKey.mutate(
-                      { id: key.id },
-                      { onError: (error) => toast(error.message, 'error') },
-                    )
-                  }
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: t('common.delete'),
+                    description: `${t('common.delete')} ${key.name}?`,
+                    confirmLabel: t('common.delete'),
+                    danger: true,
+                  })
+                  if (!ok) return
+                  revokeKey.mutate(
+                    { id: key.id },
+                    { onError: (error) => toast(error.message, 'error') },
+                  )
                 }}
               >
                 {t('common.delete')}

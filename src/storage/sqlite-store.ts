@@ -530,7 +530,9 @@ export class SqliteStore implements Store {
 
   listApiKeys(kind: ApiKeyKind): ApiKeyRecord[] {
     return this.#db
-      .prepare('SELECT * FROM api_keys WHERE kind = ? ORDER BY created_at DESC')
+      .prepare(
+        'SELECT * FROM api_keys WHERE kind = ? AND revoked_at IS NULL ORDER BY created_at DESC',
+      )
       .all(kind)
       .map((row) => this.#parseApiKey(row));
   }

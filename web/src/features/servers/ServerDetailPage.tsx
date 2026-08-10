@@ -10,6 +10,7 @@ import {
 } from '../../app/queries'
 import { useI18n } from '../../i18n'
 import { useToast } from '../../components/ui/Toast'
+import { useConfirm } from '../../components/ui/ConfirmDialog'
 import { Badge, StatusDot } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { CopyButton } from '../../components/ui/CopyButton'
@@ -22,6 +23,7 @@ export function ServerDetailPage() {
   const { id = '' } = useParams()
   const { t, locale } = useI18n()
   const { toast } = useToast()
+  const confirm = useConfirm()
   const { data: server, isLoading } = useServer(id)
   const { data: capability } = useServerCapabilities(id)
   const { data: logs } = useServerLogs(id)
@@ -217,13 +219,18 @@ export function ServerDetailPage() {
                   <span className="text-sm text-ink-2">{t('common.delete')}</span>
                   <Button
                     variant="danger"
-                    onClick={() => {
-                      if (window.confirm(`${t('common.delete')} ${server.name}?`)) {
-                        deleteServer.mutate(
-                          { id },
-                          { onSuccess: () => (window.location.href = '/servers') },
-                        )
-                      }
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: t('common.delete'),
+                        description: `${t('common.delete')} ${server.name}?`,
+                        confirmLabel: t('common.delete'),
+                        danger: true,
+                      })
+                      if (!ok) return
+                      deleteServer.mutate(
+                        { id },
+                        { onSuccess: () => (window.location.href = '/servers') },
+                      )
                     }}
                   >
                     {t('common.delete')}

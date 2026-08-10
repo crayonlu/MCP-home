@@ -9,6 +9,7 @@ import {
 import { useI18n } from '../../i18n'
 import { useTheme } from '../../app/theme'
 import { useToast } from '../../components/ui/Toast'
+import { useConfirm } from '../../components/ui/ConfirmDialog'
 import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
 import { TextField, TextareaField } from '../../components/ui/Field'
@@ -28,6 +29,7 @@ export function SettingsPage() {
   const { locale, setLocale } = useI18n()
   const { theme, setTheme } = useTheme()
   const { toast } = useToast()
+  const confirm = useConfirm()
   const { data: controlKeys } = useControlKeys()
   const createKey = useCreateControlKey()
   const revokeKey = useRevokeControlKey()
@@ -158,13 +160,18 @@ export function SettingsPage() {
               </div>
               <Button
                 variant="ghost"
-                onClick={() => {
-                  if (window.confirm(`revoke ${key.name}?`)) {
-                    revokeKey.mutate(
-                      { id: key.id },
-                      { onError: (error) => toast(error.message, 'error') },
-                    )
-                  }
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: 'revoke',
+                    description: `revoke ${key.name}?`,
+                    confirmLabel: 'revoke',
+                    danger: true,
+                  })
+                  if (!ok) return
+                  revokeKey.mutate(
+                    { id: key.id },
+                    { onError: (error) => toast(error.message, 'error') },
+                  )
                 }}
               >
                 {t('common.delete')}
