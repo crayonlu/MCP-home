@@ -39,6 +39,8 @@ export function ServerDetailPage() {
 
   const meta = runtimeStatusMeta(server.runtime?.status ?? 'unknown')
   const endpoint = `https://mcp.cyncyn.xyz/mcp/${server.slug}`
+  const actionBusy = serverAction.isPending && serverAction.variables?.id === id
+  const deleting = deleteServer.isPending && deleteServer.variables?.id === id
 
   const tabs: TabItem[] = [
     { value: 'overview', label: t('server.overview') },
@@ -81,10 +83,12 @@ export function ServerDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={() => serverAction.mutate({ id, action: 'refresh' })}>
-            {t('common.refresh')}
+          <Button loading={actionBusy} onClick={() => serverAction.mutate({ id, action: 'refresh' })}>
+            {actionBusy && serverAction.variables?.action === 'restart'
+              ? t('server.restarting')
+              : t('common.refresh')}
           </Button>
-          <Button variant="primary" onClick={() => setEditOpen(true)}>
+          <Button variant="primary" onClick={() => setEditOpen(true)} disabled={actionBusy}>
             {t('common.edit')}
           </Button>
         </div>
@@ -211,7 +215,11 @@ export function ServerDetailPage() {
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between bg-surface px-4 py-3">
                   <span className="text-sm text-ink-2">{t('server.restart')}</span>
-                  <Button onClick={() => serverAction.mutate({ id, action: 'restart' })}>
+                  <Button
+                    loading={actionBusy && serverAction.variables?.action === 'restart'}
+                    disabled={actionBusy}
+                    onClick={() => serverAction.mutate({ id, action: 'restart' })}
+                  >
                     {t('server.restart')}
                   </Button>
                 </div>
@@ -219,6 +227,8 @@ export function ServerDetailPage() {
                   <span className="text-sm text-ink-2">{t('common.delete')}</span>
                   <Button
                     variant="danger"
+                    loading={deleting}
+                    disabled={deleting || actionBusy}
                     onClick={async () => {
                       const ok = await confirm({
                         title: t('common.delete'),

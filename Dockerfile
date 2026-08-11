@@ -1,5 +1,11 @@
 FROM node:24-alpine AS runtime
 
+# uv / uvx: run Python-based MCP servers (fetch, git, memory, …) from the Market catalog
+RUN apk add --no-cache curl && \
+    curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv /root/.local/bin/uv /root/.local/bin/uvx /usr/local/bin/ && \
+    rm -rf /root/.local
+
 ENV NODE_ENV=production
 ENV MCP_HOME_HOST=0.0.0.0
 ENV MCP_HOME_PORT=3344

@@ -121,6 +121,7 @@ mcp-home market list                                    # browse 24+ curated ent
 mcp-home market install resend --set RESEND_API_KEY=re_xxx   # home-stdio (npm)
 mcp-home market install context7 --set CONTEXT7_API_KEY=xxx  # remote (bearer)
 mcp-home market install deepwiki                        # remote (no auth)
+mcp-home market install fetch                           # uvx (Python, no config)
 mcp-home market uninstall resend                        # remove
 ```
 

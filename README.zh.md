@@ -132,8 +132,9 @@ npm run cli -- market install resend --set RESEND_API_KEY=re_xxx
 npm run cli -- market uninstall resend
 ```
 
-- 条目分 `remote`（官方 Streamable HTTP 端点，OAuth 或 API key）与 `home-stdio`（npm 包，装到 Market 目录）。
+- 条目分 `remote`（官方 Streamable HTTP 端点，OAuth 或 API key）、`home-stdio`（npm 包，装到 Market 目录）与 `uvx`（PyPI 上的 Python 包）。
 - 安装 home-stdio 条目会执行 `npm install --prefix <marketDir>`，并创建 env Credential 与对应 Server。
+- 安装 uvx 条目会执行 `uv tool install`，并创建 command 为 `uvx <package>` 的 Server（uv 运行时已内置进 Docker 镜像）。
 - Web 控制台的 Market 页提供图形化安装/卸载；OAuth 条目安装后需走授权流。
 
 ## Harness 接入

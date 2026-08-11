@@ -132,8 +132,9 @@ npm run cli -- market install resend --set RESEND_API_KEY=re_xxx
 npm run cli -- market uninstall resend
 ```
 
-- Entries are either `remote` (official Streamable HTTP endpoints, OAuth or API key) or `home-stdio` (npm packages installed into the Market directory).
+- Entries are `remote` (official Streamable HTTP endpoints, OAuth or API key), `home-stdio` (npm packages installed into the Market directory), or `uvx` (Python packages from PyPI).
 - Installing a `home-stdio` entry runs `npm install --prefix <marketDir>` and creates an env Credential plus the matching Server.
+- Installing a `uvx` entry runs `uv tool install` and creates a Server whose command is `uvx <package>` (the `uv` runtime is bundled in the Docker image).
 - The web console's Market page offers the same flow graphically; OAuth entries need the authorization flow after install.
 
 ## Connecting a Harness

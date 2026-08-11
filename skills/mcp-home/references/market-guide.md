@@ -13,7 +13,12 @@ github (PAT), linear, slack, stripe, figma, sentry, supabase, notion, cloudflare
 context7, exa, tavily, firecrawl, openrouter, apifox
 
 ### Home-stdio (npm)
-resend, tailscale, playwright, postgres, sqlite, memory, sequential-thinking, fetch
+resend, tailscale, playwright, postgres, sqlite, memory, sequential-thinking
+
+### Uvx (Python)
+fetch
+
+> ⚠️ The npm package name `mcp-server-fetch` is **squatted** by a canary (npx-confusion) package that runs code on install. The official Fetch server is Python — the catalog installs it via `uvx`, never via npm.
 
 ## Installation
 
@@ -22,6 +27,7 @@ mcp-home market list                                    # browse with install st
 mcp-home market install resend --set RESEND_API_KEY=re_xxx
 mcp-home market install context7 --set CONTEXT7_API_KEY=xxx
 mcp-home market install deepwiki                        # no config needed
+mcp-home market install fetch                           # uvx (Python), no config
 mcp-home market uninstall resend
 ```
 
@@ -31,9 +37,11 @@ mcp-home market uninstall resend
 
 **Home-stdio entries**: Runs `npm install --prefix <marketDir> <package>`, creates an env credential, and creates a home server with the stdio command pointing to the installed binary. The install is async with progress logging.
 
+**Uvx entries**: Runs `uv tool install <package>` (Python packages from PyPI), then creates a home server with the stdio command `uvx <package>`. Requires the `uv` runtime, which is bundled in the Docker image.
+
 ### Install Location
 
-Home-stdio packages install to `MCP_HOME_MARKET_DIR` (default `<dataDir>/market`), which is a persistent Docker volume. Packages survive container restarts.
+Home-stdio packages install to `MCP_HOME_MARKET_DIR` (default `<dataDir>/market`), which is a persistent Docker volume. Packages survive container restarts. Uvx tools and caches install to `<dataDir>/.uv`, also persistent.
 
 ### Installation Progress
 

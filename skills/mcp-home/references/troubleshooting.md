@@ -50,6 +50,19 @@ docker exec mcp-home rm -rf /data/market/node_modules /data/market/package-lock.
 mcp-home market install <id> --set KEY=value
 ```
 
+## Fetch Server Won't Start (package name squatting)
+
+**Symptom**: Installing `fetch` from Market produces a server that never reaches "ready", or the installed package description mentions "security research canary".
+
+**Cause**: The npm name `mcp-server-fetch` is **squatted** — the official Fetch server is Python (PyPI `mcp-server-fetch`). The npm package is a canary that runs code in a `postinstall` script.
+
+**Fix**: Ensure the catalog entry uses `kind: "uvx"` (installs via `uv tool install`, runs via `uvx`). Remove any npm-installed copy:
+```bash
+docker exec mcp-home rm -rf /data/market/node_modules/mcp-server-fetch /data/market/node_modules/.bin/mcp-server-fetch
+mcp-home server delete <fetch-server-id>
+mcp-home market install fetch
+```
+
 ## Cloudflare Proxy SSE Delay (~25s per request)
 
 **Symptom**: Every MCP request (initialize, tools/list, tools/call) takes ~25s through Cloudflare, but works fine direct.

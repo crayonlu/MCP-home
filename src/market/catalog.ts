@@ -17,7 +17,7 @@ export interface MarketEntry {
   name: string
   description: string
   category: string
-  kind: 'home-stdio' | 'remote'
+  kind: 'home-stdio' | 'remote' | 'uvx'
   package?: string
   bin?: string
   url?: string
@@ -344,7 +344,7 @@ export const marketCatalog: MarketEntry[] = [
     name: 'Fetch',
     description: 'Fetch web pages and convert to markdown',
     category: 'search',
-    kind: 'home-stdio',
+    kind: 'uvx',
     package: 'mcp-server-fetch',
     bin: 'mcp-server-fetch',
     credential: { type: 'env' },

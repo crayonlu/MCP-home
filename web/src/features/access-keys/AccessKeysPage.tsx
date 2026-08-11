@@ -55,6 +55,8 @@ export function AccessKeysPage() {
               <span className="text-xs text-ink-3">{new Date(key.createdAt).toLocaleDateString()}</span>
               <Button
                 variant="ghost"
+                loading={revokeKey.isPending && revokeKey.variables?.id === key.id}
+                disabled={revokeKey.isPending && revokeKey.variables?.id === key.id}
                 onClick={async () => {
                   const ok = await confirm({
                     title: t('common.delete'),

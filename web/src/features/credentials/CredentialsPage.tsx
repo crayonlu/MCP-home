@@ -10,7 +10,7 @@ import {
 import { useI18n } from '../../i18n'
 import { useToast } from '../../components/ui/Toast'
 import { useConfirm } from '../../components/ui/ConfirmDialog'
-import { Button } from '../../components/ui/Button'
+import { Button, Spinner } from '../../components/ui/Button'
 import { Badge, EmptyState, StatusDot } from '../../components/ui/Badge'
 import { ActionsMenu } from '../../components/ui/Menu'
 import { credentialStatusLabel, credentialStatusMeta } from '../../app/status'
@@ -53,6 +53,12 @@ export function CredentialsPage() {
     }
   }, [credentials])
 
+  const testing = (id: string) => testCredential.isPending && testCredential.variables?.id === id
+  const revoking = (id: string) =>
+    revokeCredential.isPending && revokeCredential.variables === id
+  const deleting = (id: string) =>
+    deleteCredential.isPending && deleteCredential.variables?.id === id
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
@@ -75,16 +81,36 @@ export function CredentialsPage() {
         <div className="flex flex-col divide-y divide-ink-3/10">
           {credentials.map((credential) => {
             const meta = credentialStatusMeta(credential.status)
+            const busy =
+              testing(credential.id) || revoking(credential.id) || deleting(credential.id)
             return (
-              <div key={credential.id} className="flex min-h-[52px] items-center gap-3 px-1 py-2">
-                <StatusDot tone={meta.tone} pulse={meta.pulse} />
+              <div
+                key={credential.id}
+                className={`flex min-h-[52px] items-center gap-3 px-1 py-2 transition-opacity ${
+                  deleting(credential.id) ? 'opacity-50' : ''
+                }`}
+              >
+                <StatusDot tone={busy ? 'accent' : meta.tone} pulse={busy || meta.pulse} />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-sm font-medium text-ink">{credential.name}</span>
                   <span className="truncate text-xs text-ink-3">
-                    {credentialStatusLabel(credential.status, locale)}
-                    {credential.expiresAt
-                      ? ` · ${new Date(credential.expiresAt).toLocaleDateString()}`
-                      : ''}
+                    {busy ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Spinner className="size-3" />
+                        {revoking(credential.id)
+                          ? t('credential.revoking')
+                          : testing(credential.id)
+                            ? t('credential.testing')
+                            : t('credential.deleting')}
+                      </span>
+                    ) : (
+                      <>
+                        {credentialStatusLabel(credential.status, locale)}
+                        {credential.expiresAt
+                          ? ` · ${new Date(credential.expiresAt).toLocaleDateString()}`
+                          : ''}
+                      </>
+                    )}
                   </span>
                 </div>
                 <Badge tone={typeTone[credential.type]}>{credential.type}</Badge>
@@ -94,12 +120,14 @@ export function CredentialsPage() {
                       ? [
                           {
                             label: t('credential.authorize'),
+                            disabled: busy,
                             onSelect: () => setAuthTarget(credential),
                           },
                         ]
                       : []),
                     {
                       label: t('common.refresh'),
+                      disabled: busy,
                       onSelect: () =>
                         testCredential.mutate(
                           { id: credential.id },
@@ -117,6 +145,7 @@ export function CredentialsPage() {
                       ? [
                           {
                             label: t('credential.revoke'),
+                            disabled: busy,
                             onSelect: () =>
                               revokeCredential.mutate(
                                 credential.id,
@@ -125,13 +154,18 @@ export function CredentialsPage() {
                           },
                         ]
                       : []),
-                    { label: t('common.edit'), onSelect: () => {
+                    {
+                      label: t('common.edit'),
+                      disabled: busy,
+                      onSelect: () => {
                         setEditing(credential)
                         setFormOpen(true)
-                      } },
+                      },
+                    },
                     {
                       label: t('common.delete'),
                       danger: true,
+                      disabled: busy,
                       onSelect: async () => {
                         const ok = await confirm({
                           title: t('common.delete'),

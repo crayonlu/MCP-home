@@ -37,6 +37,7 @@ export function SettingsPage() {
   const [keyOpen, setKeyOpen] = useState(false)
   const [secret, setSecret] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
+  const [running, setRunning] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [method, setMethod] = useState('GET')
   const [path, setPath] = useState('/api/v1/overview')
@@ -79,6 +80,7 @@ export function SettingsPage() {
   }
 
   const runRaw = async () => {
+    setRunning(true)
     try {
       let result: unknown
       if (method === 'GET') result = await api.get(path)
@@ -87,6 +89,8 @@ export function SettingsPage() {
       setRawResult(JSON.stringify(result, null, 2))
     } catch (error) {
       setRawResult(`error: ${(error as Error).message}`)
+    } finally {
+      setRunning(false)
     }
   }
 
@@ -160,6 +164,8 @@ export function SettingsPage() {
               </div>
               <Button
                 variant="ghost"
+                loading={revokeKey.isPending && revokeKey.variables?.id === key.id}
+                disabled={revokeKey.isPending && revokeKey.variables?.id === key.id}
                 onClick={async () => {
                   const ok = await confirm({
                     title: t('credential.revoke'),
@@ -205,7 +211,7 @@ export function SettingsPage() {
               spellCheck={false}
               className="h-9 min-w-0 flex-1 bg-surface-2 px-3 font-mono text-sm text-ink focus:outline-none focus:ring-2 focus:ring-accent/50"
             />
-            <Button onClick={runRaw}>
+            <Button loading={running} onClick={runRaw}>
               <Terminal className="size-4" />
               {t('settings.run')}
             </Button>

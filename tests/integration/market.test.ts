@@ -1,3 +1,6 @@
+import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createTestRuntime, controlRequest, jsonResponse } from '../support/runtime.js';
 import { credentialRecordSchema, serverRecordSchema } from '../../src/domain/models.js';
@@ -46,6 +49,7 @@ describe('market', () => {
       expect(items.length).toBeGreaterThan(20);
       expect(items.some((item) => item.id === 'github' && item.kind === 'remote')).toBe(true);
       expect(items.some((item) => item.id === 'resend' && item.kind === 'home-stdio')).toBe(true);
+      expect(items.some((item) => item.id === 'fetch' && item.kind === 'uvx')).toBe(true);
       for (const item of items) expect(item.installed).toBe(false);
     } finally {
       await close();
@@ -128,6 +132,36 @@ describe('market', () => {
       expect(second.status).toBe(409);
     } finally {
       await close();
+    }
+  });
+
+  it('installs a uvx entry via uv tool install', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'mcp-home-uv-'));
+    const uvPath = join(fakeBin, 'uv');
+    writeFileSync(uvPath, '#!/bin/sh\nexit 0\n');
+    chmodSync(uvPath, 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${fakeBin}:${previousPath}`;
+    const { runtime, controlKey, close } = createTestRuntime();
+    try {
+      const result = (await installEntry(runtime, controlKey, 'fetch')) as {
+        server: unknown;
+        credential: unknown;
+      };
+      const server = serverRecordSchema.parse(result.server);
+      const credential = credentialRecordSchema.parse(result.credential);
+      expect(server.slug).toBe('fetch');
+      expect(server.transport.type).toBe('stdio');
+      if (server.transport.type === 'stdio') {
+        expect(server.transport.command).toBe('uvx');
+        expect(server.transport.args).toEqual(['mcp-server-fetch']);
+        expect(server.transport.env?.UV_CACHE_DIR).toBeDefined();
+        expect(server.transport.env?.UV_TOOL_DIR).toBeDefined();
+      }
+      expect(credential.type).toBe('env');
+    } finally {
+      await close();
+      process.env.PATH = previousPath;
     }
   });
 });

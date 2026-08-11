@@ -90,7 +90,13 @@ export function MarketPage() {
               </p>
               <div className="flex items-center justify-between">
                 {entry.installed ? (
-                  <Button variant="ghost" size="sm" onClick={() => remove(entry)}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={uninstall.isPending && uninstall.variables?.id === entry.id}
+                    disabled={uninstall.isPending && uninstall.variables?.id === entry.id}
+                    onClick={() => remove(entry)}
+                  >
                     <Trash2 className="size-3.5" />
                     {t('market.uninstall')}
                   </Button>
