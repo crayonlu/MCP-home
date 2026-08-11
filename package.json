@@ -1,6 +1,6 @@
 {
   "name": "mcp-home",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Self-hosted home for remote-native and home-hosted MCP servers.",
   "type": "module",
   "bin": {

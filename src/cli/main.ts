@@ -4,8 +4,23 @@ import { Command } from 'commander';
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { ControlClient } from '../control/client.js';
+
+function packageVersion(): string {
+  let directory = dirname(fileURLToPath(import.meta.url));
+  for (;;) {
+    try {
+      return (JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8')) as { version: string })
+        .version;
+    } catch {
+      const parent = dirname(directory);
+      if (parent === directory) return '0.0.0';
+      directory = parent;
+    }
+  }
+}
 
 const localConfigSchema = z.object({
   url: z.url().superRefine((value, context) => {
@@ -36,7 +51,7 @@ interface GlobalOptions {
 const program = new Command()
   .name('mcp-home')
   .description('Complete CLI for the MCP Home Control API')
-  .version('0.1.0')
+  .version(packageVersion())
   .option('--url <url>', 'MCP Home base URL')
   .option('--key <key>', 'Control API key')
   .option('--output <format>', 'human or json', parseOutput, 'human');
