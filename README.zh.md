@@ -25,21 +25,21 @@ npx skills add crayonlu/mcp-home -g -y
 
 控制台提供与 CLI 完全对齐的功能：服务器与凭据管理、OAuth 授权、Market 一键安装、调用观测、诊断、事件、配置导入导出，以及中英双语和移动端适配。
 
-![Dashboard](docs/screenshots/zh/dashboard.png)
-
-![Servers](docs/screenshots/zh/servers.png)
-
-![Calls](docs/screenshots/zh/calls.png)
-
-![Credentials](docs/screenshots/zh/credentials.png)
-
-![Market](docs/screenshots/zh/market.png)
-
-![Settings](docs/screenshots/zh/settings.png)
+<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+  <img src="docs/screenshots/zh/dashboard.png" width="49%" alt="Dashboard">
+  <img src="docs/screenshots/zh/servers.png" width="49%" alt="Servers">
+  <img src="docs/screenshots/zh/calls.png" width="49%" alt="Calls">
+  <img src="docs/screenshots/zh/credentials.png" width="49%" alt="Credentials">
+  <img src="docs/screenshots/zh/market.png" width="49%" alt="Market">
+  <img src="docs/screenshots/zh/settings.png" width="49%" alt="Settings">
+</div>
 
 移动端：
 
-![Market mobile](docs/screenshots/zh/market-mobile.png) ![Dashboard mobile](docs/screenshots/zh/dashboard-mobile.png)
+<div style="display: flex; gap: 8px;">
+  <img src="docs/screenshots/zh/market-mobile.png" width="49%" alt="Market mobile">
+  <img src="docs/screenshots/zh/dashboard-mobile.png" width="49%" alt="Dashboard mobile">
+</div>
 
 ## 项目边界
 

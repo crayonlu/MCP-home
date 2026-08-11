@@ -25,21 +25,21 @@ This gives the agent knowledge of all CLI commands, OAuth flows, Market installa
 
 The web console mirrors the full CLI surface: server and credential management, OAuth authorization, one-click Market installs, tool call observability, diagnostics, events, config export/import — with Chinese/English UI and mobile support.
 
-![Dashboard](docs/screenshots/en/dashboard.png)
-
-![Servers](docs/screenshots/en/servers.png)
-
-![Calls](docs/screenshots/en/calls.png)
-
-![Credentials](docs/screenshots/en/credentials.png)
-
-![Market](docs/screenshots/en/market.png)
-
-![Settings](docs/screenshots/en/settings.png)
+<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+  <img src="docs/screenshots/en/dashboard.png" width="49%" alt="Dashboard">
+  <img src="docs/screenshots/en/servers.png" width="49%" alt="Servers">
+  <img src="docs/screenshots/en/calls.png" width="49%" alt="Calls">
+  <img src="docs/screenshots/en/credentials.png" width="49%" alt="Credentials">
+  <img src="docs/screenshots/en/market.png" width="49%" alt="Market">
+  <img src="docs/screenshots/en/settings.png" width="49%" alt="Settings">
+</div>
 
 Mobile:
 
-![Market mobile](docs/screenshots/en/market-mobile.png) ![Dashboard mobile](docs/screenshots/en/dashboard-mobile.png)
+<div style="display: flex; gap: 8px;">
+  <img src="docs/screenshots/en/market-mobile.png" width="49%" alt="Market mobile">
+  <img src="docs/screenshots/en/dashboard-mobile.png" width="49%" alt="Dashboard mobile">
+</div>
 
 ## Project Scope
 
