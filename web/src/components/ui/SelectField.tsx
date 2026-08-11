@@ -31,7 +31,10 @@ export function SelectField({
         }}
       >
         <Select.Trigger className="flex h-9 w-full select-none items-center justify-between bg-surface-2 px-3 text-sm text-ink data-[popup-open]:ring-2 data-[popup-open]:ring-accent/50">
-          <Select.Value placeholder=" " />
+          <Select.Value>
+            {options.find((option) => option.value === value)?.label ??
+              (value === '' ? ' ' : String(value))}
+          </Select.Value>
           <Select.Icon>
             <ChevronDown className="size-4 text-ink-3" />
           </Select.Icon>
