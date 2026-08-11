@@ -17,6 +17,8 @@ import type {
   ToolCallDraft,
   ToolCallFilter,
   ToolCallRecord,
+  ToolCallSeriesBucket,
+  ToolCallSeriesQuery,
   ToolCallStats,
   ToolProjection,
   UpdateCredentialInput,
@@ -84,6 +86,7 @@ export interface Store {
   listToolCalls(filter: ToolCallFilter): ToolCallRecord[];
   countToolCalls(filter: ToolCallFilter): number;
   toolCallStats(filter: Omit<ToolCallFilter, 'limit' | 'offset'>): ToolCallStats;
+  toolCallSeries(query: ToolCallSeriesQuery): ToolCallSeriesBucket[];
   deleteOldToolCalls(before: string): number;
 
   // ── Market install records & persistent jobs ───────────────────────────

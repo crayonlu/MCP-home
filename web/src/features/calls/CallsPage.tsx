@@ -1,9 +1,10 @@
 import { Activity } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { useCallStats, useCalls, useServers } from '../../app/queries'
+import { useCallSeries, useCallStats, useCalls, useServers } from '../../app/queries'
 import { useI18n } from '../../i18n'
 import { Badge, EmptyState } from '../../components/ui/Badge'
 import { SelectField, type SelectOption } from '../../components/ui/SelectField'
+import { CallChart } from '../../components/ui/CallChart'
 import type { ToolCallStatus } from '../../api/types'
 
 const statusOptions: SelectOption[] = [
@@ -65,6 +66,8 @@ export function CallsPage() {
   const filter = { server_id: serverId || undefined, tool: tool || undefined, status: status || undefined, from }
   const calls = useCalls({ limit: '50', ...filter })
   const stats = useCallStats(filter)
+  const bucket = windowMs === '604800000' ? '6h' : windowMs === '2592000000' ? '1d' : '1h'
+  const series = useCallSeries(filter, bucket)
 
   const recent = calls.data?.items ?? []
   const s = stats.data
@@ -81,6 +84,23 @@ export function CallsPage() {
         {summaryCard(t('calls.avgDuration'), s === undefined ? '—' : `${s.avgDurationMs}ms`)}
         {summaryCard(t('calls.p50'), s === undefined ? '—' : `${s.p50Ms}ms`)}
         {summaryCard(t('calls.p95'), s === undefined ? '—' : `${s.p95Ms}ms`)}
+      </div>
+
+      <div className="bg-surface px-4 py-3">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-sm font-medium text-ink">{t('calls.trend')}</span>
+          <span className="flex items-center gap-3 font-mono text-[10px] text-ink-3">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block size-2 bg-[var(--mch-accent)]" />
+              {t('calls.calls')}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block size-2 bg-[var(--mch-danger)]" />
+              {t('calls.errors')}
+            </span>
+          </span>
+        </div>
+        <CallChart points={series.data?.points ?? []} bucketSeconds={series.data?.bucketSeconds ?? 3600} />
       </div>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">

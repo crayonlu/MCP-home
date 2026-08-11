@@ -244,3 +244,15 @@ export interface CallStats {
   topTools: { tool: string; count: number }[]
   topFailing: { tool: string; errorType: string | null; count: number }[]
 }
+
+export interface CallSeriesPoint {
+  bucket: string
+  total: number
+  success: number
+  error: number
+}
+
+export interface CallSeries {
+  bucketSeconds: number
+  points: CallSeriesPoint[]
+}

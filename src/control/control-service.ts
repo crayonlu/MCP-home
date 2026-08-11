@@ -4,6 +4,7 @@ import {
   createCredentialInputSchema,
   createServerInputObjectSchema,
   createServerInputSchema,
+  parseBucketSeconds,
   setProjectionInputSchema,
   toolCallFilterSchema,
   updateCredentialInputSchema,
@@ -586,6 +587,34 @@ export class ControlService {
       ...input,
     });
     return this.#store.toolCallStats(filter);
+  }
+
+  callSeries(value: Record<string, unknown>) {
+    const bucketSeconds = parseBucketSeconds(
+      typeof value.bucket === 'string' ? value.bucket : undefined,
+    );
+    const from = typeof value.from === 'string' ? value.from : undefined;
+    const to = typeof value.to === 'string' ? value.to : undefined;
+    const serverId = typeof value.server_id === 'string' ? value.server_id : undefined;
+    const tool = typeof value.tool === 'string' ? value.tool : undefined;
+    const buckets = this.#store.toolCallSeries({ from, to, bucketSeconds, serverId, tool });
+
+    const start = from !== undefined ? Math.floor(Date.parse(from) / 1000 / bucketSeconds) : buckets[0]?.bucket ?? 0;
+    const end = to !== undefined ? Math.floor(Date.parse(to) / 1000 / bucketSeconds) : buckets[buckets.length - 1]?.bucket ?? start;
+    const byBucket = new Map(buckets.map((item) => [item.bucket, item]));
+    const points: { bucket: string; total: number; success: number; error: number }[] = [];
+    for (let bucket = start; bucket <= end; bucket += 1) {
+      const item = byBucket.get(bucket);
+      const total = item?.total ?? 0;
+      const success = item?.success ?? 0;
+      points.push({
+        bucket: new Date(bucket * bucketSeconds * 1000).toISOString(),
+        total,
+        success,
+        error: total - success,
+      });
+    }
+    return { bucketSeconds, points };
   }
 
   #requireServer(serverId: string) {

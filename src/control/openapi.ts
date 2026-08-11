@@ -208,6 +208,16 @@ export function controlOpenApi(publicUrl: URL): Record<string, unknown> {
       { name: 'to', in: 'query', schema: { type: 'string', format: 'date-time' } },
     ],
   });
+  add('/api/v1/calls/series', 'get', 'getCallSeries', {
+    summary: 'Tool call counts bucketed over time for line charts',
+    parameters: [
+      { name: 'bucket', in: 'query', schema: { type: 'string', description: 'e.g. 30m, 1h, 6h, 1d (default 1h)' } },
+      { name: 'server_id', in: 'query', schema: { type: 'string' } },
+      { name: 'tool', in: 'query', schema: { type: 'string' } },
+      { name: 'from', in: 'query', schema: { type: 'string', format: 'date-time' } },
+      { name: 'to', in: 'query', schema: { type: 'string', format: 'date-time' } },
+    ],
+  });
   add('/api/v1/diagnostics', 'get', 'getDiagnostics', {
     summary: 'Read system diagnostics',
   });

@@ -147,6 +147,32 @@ describe('tool call store', () => {
     }
   });
 
+  it('buckets tool calls over time for charts', () => {
+    const { store, serverA, close } = createStore();
+    try {
+      const hour = 3_600_000;
+      const now = Date.now();
+      const base = now - (now % hour);
+      store.insertToolCalls([
+        draft({ serverId: serverA.id, startedAt: new Date(base).toISOString(), status: 'success' }),
+        draft({ serverId: serverA.id, startedAt: new Date(base + 60_000).toISOString(), status: 'timeout' }),
+        draft({ serverId: serverA.id, startedAt: new Date(base + hour).toISOString(), status: 'success' }),
+        draft({ serverId: serverA.id, startedAt: new Date(base + 2 * hour).toISOString(), status: 'success' }),
+      ]);
+      const series = store.toolCallSeries({
+        from: new Date(base).toISOString(),
+        to: new Date(base + 3 * hour).toISOString(),
+        bucketSeconds: 3600,
+      });
+      expect(series).toHaveLength(3);
+      expect(series[0]).toEqual({ bucket: Math.floor(base / 1000 / 3600), total: 2, success: 1 });
+      expect(series[1]).toEqual({ bucket: Math.floor((base + hour) / 1000 / 3600), total: 1, success: 1 });
+      expect(series[2]).toEqual({ bucket: Math.floor((base + 2 * hour) / 1000 / 3600), total: 1, success: 1 });
+    } finally {
+      close();
+    }
+  });
+
   it('deletes rows older than the retention boundary in batches', () => {
     const { store, serverA, serverB, close } = createStore();
     try {

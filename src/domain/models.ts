@@ -383,6 +383,35 @@ export const toolCallFilterSchema = z.object({
 });
 export type ToolCallFilter = z.infer<typeof toolCallFilterSchema>;
 
+export interface ToolCallSeriesQuery {
+  from?: string;
+  to?: string;
+  bucketSeconds: number;
+  serverId?: string;
+  tool?: string;
+}
+
+export interface ToolCallSeriesBucket {
+  /** Bucket start as epoch seconds (UTC). */
+  bucket: number;
+  total: number;
+  success: number;
+}
+
+const bucketUnits: Record<'s' | 'm' | 'h' | 'd', number> = {
+  s: 1,
+  m: 60,
+  h: 3600,
+  d: 86_400,
+};
+
+/** Parses a human bucket like "30m", "1h", "6h", "1d"; defaults to 1h. */
+export function parseBucketSeconds(value: string | undefined): number {
+  const match = /^(\d+)([smhd])$/.exec(value ?? '');
+  if (!match) return 3600;
+  return Number(match[1]) * bucketUnits[match[2] as keyof typeof bucketUnits];
+}
+
 export interface ToolCallStats {
   total: number;
   byStatus: Partial<Record<ToolCallStatus, number>>;

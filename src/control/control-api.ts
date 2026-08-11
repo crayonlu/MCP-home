@@ -285,6 +285,10 @@ export function mountControlApi(
     route((context) => options.service.callStats(queryObject(context))),
   );
   app.get(
+    '/api/v1/calls/series',
+    route((context) => options.service.callSeries(queryObject(context))),
+  );
+  app.get(
     '/api/v1/diagnostics',
     route(() => options.service.diagnostics()),
   );

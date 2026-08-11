@@ -46,6 +46,8 @@ import {
   type ToolCallDraft,
   type ToolCallFilter,
   type ToolCallRecord,
+  type ToolCallSeriesBucket,
+  type ToolCallSeriesQuery,
   type ToolCallStats,
   type ToolCallStatus,
   type ToolProjection,
@@ -1023,8 +1025,7 @@ export class SqliteStore implements Store {
     return (row as { n: number }).n;
   }
 
-  toolCallStats(filter: Omit<ToolCallFilter, 'limit' | 'offset'>): ToolCallStats {
-    const { where, params } = this.#callWhere({ ...filter, limit: 50, offset: 0 });
+  toolCallStats(filter: Omit<ToolCallFilter, 'limit' | 'offset'>): ToolCallStats {    const { where, params } = this.#callWhere({ ...filter, limit: 50, offset: 0 });
     const totalRow = this.#db.prepare(`SELECT COUNT(*) AS n FROM tool_calls ${where}`).get(...params) as {
       n: number;
     };
@@ -1093,6 +1094,44 @@ export class SqliteStore implements Store {
       topTools,
       topFailing,
     };
+  }
+
+  toolCallSeries(query: ToolCallSeriesQuery): ToolCallSeriesBucket[] {
+    const conditions: string[] = [];
+    const params: (string | number)[] = [query.bucketSeconds];
+    if (query.serverId !== undefined) {
+      conditions.push('server_id = ?');
+      params.push(query.serverId);
+    }
+    if (query.tool !== undefined) {
+      conditions.push('upstream_tool_name = ?');
+      params.push(query.tool);
+    }
+    if (query.from !== undefined) {
+      conditions.push('started_at >= ?');
+      params.push(query.from);
+    }
+    if (query.to !== undefined) {
+      conditions.push('started_at <= ?');
+      params.push(query.to);
+    }
+    const where = conditions.length === 0 ? '' : `WHERE ${conditions.join(' AND ')}`;
+    const rows = this.#db
+      .prepare(
+        `SELECT CAST(CAST(strftime('%s', started_at) AS INTEGER) / ? AS INTEGER) AS bucket,
+                COUNT(*) AS total,
+                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) AS success
+         FROM tool_calls
+         ${where}
+         GROUP BY bucket
+         ORDER BY bucket ASC`,
+      )
+      .all(...params) as { bucket: number; total: number; success: number }[];
+    return rows.map((row) => ({
+      bucket: Number(row.bucket),
+      total: Number(row.total),
+      success: Number(row.success),
+    }));
   }
 
   deleteOldToolCalls(before: string): number {

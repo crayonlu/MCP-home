@@ -4,6 +4,7 @@ import type {
   ApiKeyRecord,
   AuthorizeResult,
   CallStats,
+  CallSeries,
   CapabilitySnapshot,
   CredentialRecord,
   CredentialTestResult,
@@ -328,6 +329,22 @@ export function useCallStats(filter: Record<string, string | undefined>) {
   return useQuery({
     queryKey: ['calls-stats', queryString],
     queryFn: () => api.get<CallStats>(`/api/v1/calls/stats?${queryString}`),
+    refetchInterval: 8000,
+  })
+}
+
+export function useCallSeries(
+  filter: Record<string, string | undefined>,
+  bucket: string,
+) {
+  const query = new URLSearchParams({ bucket })
+  for (const [key, value] of Object.entries(filter)) {
+    if (value !== undefined && value !== '') query.set(key, value)
+  }
+  const queryString = query.toString()
+  return useQuery({
+    queryKey: ['calls-series', queryString],
+    queryFn: () => api.get<CallSeries>(`/api/v1/calls/series?${queryString}`),
     refetchInterval: 8000,
   })
 }
