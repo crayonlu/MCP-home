@@ -18,17 +18,43 @@ function createStore() {
     slug: 'server-a',
     name: 'Server A',
     kind: 'remote',
-    transport: { type: 'streamable-http', url: 'https://example.test/mcp' },
+    transport: {
+      type: 'streamable-http',
+      url: 'https://example.test/mcp',
+      protocolMode: 'modern',
+      allowSseFallback: false,
+      headers: {},
+    },
     credentialId: null,
     enabled: true,
+    settings: {
+      connectTimeoutMs: 15_000,
+      requestTimeoutMs: 60_000,
+      maxTotalTimeoutMs: 600_000,
+      maxConcurrency: 1,
+      restart: 'on-failure',
+    },
   });
   const serverB = store.createServer({
     slug: 'server-b',
     name: 'Server B',
     kind: 'remote',
-    transport: { type: 'streamable-http', url: 'https://example.test/mcp' },
+    transport: {
+      type: 'streamable-http',
+      url: 'https://example.test/mcp',
+      protocolMode: 'modern',
+      allowSseFallback: false,
+      headers: {},
+    },
     credentialId: null,
     enabled: true,
+    settings: {
+      connectTimeoutMs: 15_000,
+      requestTimeoutMs: 60_000,
+      maxTotalTimeoutMs: 600_000,
+      maxConcurrency: 1,
+      restart: 'on-failure',
+    },
   });
   return {
     store,
