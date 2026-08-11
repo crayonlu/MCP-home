@@ -9,6 +9,16 @@ It exposes two data-plane entry points:
 
 MCP Home does not write harness-specific adapters for Claude Code, Codex, Cursor, or anything else. Any harness that speaks standard Streamable HTTP MCP with Bearer auth works.
 
+## For AI Agents
+
+Install the MCP Home skill to teach your agent how to deploy and manage MCP Home:
+
+```bash
+npx skills add crayonlu/mcp-home -g -y
+```
+
+This gives the agent knowledge of all CLI commands, OAuth flows, Market installation, troubleshooting, and deployment patterns. The agent will know when and how to use MCP Home without manual instructions.
+
 ## Web Console
 
 The web console mirrors the full CLI surface: server and credential management, OAuth authorization, one-click Market installs, diagnostics, events, config export/import — with Chinese/English UI and mobile support.

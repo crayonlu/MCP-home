@@ -9,6 +9,16 @@ MCP Home 是一个单用户、可自托管的 Remote MCP 控制面与协议网�
 
 MCP Home 不为 Claude Code、Codex、Cursor 或其他 Harness 编写专属适配层。Harness 只需支持标准 Streamable HTTP MCP 与 Bearer 鉴权。
 
+## AI Agent 快速开始
+
+安装 MCP Home skill，让 AI agent 自动掌握 MCP Home 的部署和操作：
+
+```bash
+npx skills add crayonlu/mcp-home -g -y
+```
+
+安装后 agent 会获得全部 CLI 命令、OAuth 授权流程、Market 安装、排错和部署模式的知识，无需手动编写指令。
+
 ## Web 控制台
 
 控制台提供与 CLI 完全对齐的功能：服务器与凭据管理、OAuth 授权、Market 一键安装、诊断、事件、配置导入导出，以及中英双语和移动端适配。

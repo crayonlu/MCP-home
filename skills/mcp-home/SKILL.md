@@ -22,7 +22,11 @@ MCP Home is a single-user, self-hosted Remote MCP control plane and protocol gat
 - User wants to connect Claude Code, Cursor, Codex, or Grok to a self-hosted MCP gateway
 - User is troubleshooting MCP Home (status, OAuth, connectivity)
 
-## Quick Deployment
+## Installation
+
+MCP Home has three components. Install what you need:
+
+### 1. Deploy the server (Docker)
 
 ```bash
 docker run -d \
@@ -35,25 +39,26 @@ docker run -d \
   ghcr.io/crayonlu/mcp-home:latest
 ```
 
-Or with Docker Compose (see `references/deployment.md`).
+Or with Docker Compose (see `references/deployment.md`). After startup, open the web console at `MCP_HOME_PUBLIC_URL` and sign in with the bootstrap Control Key.
 
-After startup, open the web console at `MCP_HOME_PUBLIC_URL` and sign in with the bootstrap Control Key. Create a new Control Key, then revoke the bootstrap key.
-
-## CLI Quick Reference
-
-Install the CLI globally:
+### 2. Install the CLI (npm)
 
 ```bash
 npm install -g mcp-home
-```
-
-Authenticate:
-
-```bash
 mcp-home auth login --url https://mcp.example.com --control-key "$MCP_HOME_CONTROL_KEY"
 ```
 
-Core commands:
+The CLI manages servers, credentials, OAuth, Market, and diagnostics from any terminal.
+
+### 3. Install this skill (for AI agents)
+
+```bash
+npx skills add crayonlu/mcp-home -g -y
+```
+
+Teaches the agent all CLI commands, OAuth flows, Market installation, and troubleshooting.
+
+## CLI Quick Reference
 
 ```bash
 mcp-home status                         # overview
