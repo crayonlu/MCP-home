@@ -236,7 +236,8 @@ export function useRevokeAccessKey() {
 export function useCreateControlKey() {
   const client = useQueryClient()
   return useMutation({
-    mutationFn: (name: string) => api.post<ApiKeyRecord & { secret?: string }>('/api/v1/control-keys', { name }),
+    mutationFn: (input: { name: string; scope?: 'admin' | 'agent' }) =>
+      api.post<ApiKeyRecord & { secret?: string }>('/api/v1/control-keys', input),
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ['control-keys'] })
     },

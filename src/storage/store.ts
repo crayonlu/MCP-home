@@ -2,12 +2,16 @@ import type {
   ApiKeyKind,
   ApiKeyRecord,
   CapabilitySnapshot,
+  ControlScope,
   CreateCredentialInput,
   CreateServerInput,
   CredentialPayload,
   CredentialRecord,
   EventRecord,
+  InstallJobRecord,
+  MarketInstallation,
   RuntimeState,
+  SecureActionRecord,
   ServerProjection,
   ServerRecord,
   ToolCallDraft,
@@ -25,6 +29,7 @@ export interface CreateKeyInput {
   name: string;
   prefix: string;
   digest: string;
+  scope?: ControlScope | null;
 }
 
 export interface StoredApiKey extends ApiKeyRecord {
@@ -80,4 +85,19 @@ export interface Store {
   countToolCalls(filter: ToolCallFilter): number;
   toolCallStats(filter: Omit<ToolCallFilter, 'limit' | 'offset'>): ToolCallStats;
   deleteOldToolCalls(before: string): number;
+
+  // ── Market install records & persistent jobs ───────────────────────────
+  listInstallations(): MarketInstallation[];
+  getInstallation(entryId: string): MarketInstallation | null;
+  createInstallation(input: Omit<MarketInstallation, 'id' | 'installedAt'>): MarketInstallation;
+  deleteInstallation(id: string): void;
+  createInstallJob(input: Omit<InstallJobRecord, 'id' | 'createdAt' | 'updatedAt'>): InstallJobRecord;
+  getInstallJob(id: string): InstallJobRecord | null;
+  updateInstallJob(id: string, patch: Partial<InstallJobRecord>): InstallJobRecord;
+  markInterruptedInstallJobs(): number;
+
+  // ── Secure actions (URL-mode secret elicitation) ───────────────────────
+  createSecureAction(input: Omit<SecureActionRecord, 'id' | 'createdAt'>): SecureActionRecord;
+  getSecureAction(id: string): SecureActionRecord | null;
+  updateSecureAction(id: string, patch: Partial<SecureActionRecord>): SecureActionRecord;
 }

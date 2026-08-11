@@ -1,6 +1,6 @@
 import type { AuthInfo } from '@modelcontextprotocol/server';
 import { AppError } from '../domain/errors.js';
-import type { ApiKeyKind, ApiKeyRecord } from '../domain/models.js';
+import type { ApiKeyKind, ApiKeyRecord, ControlScope } from '../domain/models.js';
 import type { Store } from '../storage/store.js';
 import type { ApiKeyHasher } from './api-keys.js';
 
@@ -13,6 +13,8 @@ export interface AuthPrincipal {
   id: string;
   kind: ApiKeyKind;
   name: string;
+  /** Control keys carry a scope; access keys have null. */
+  scope: ControlScope | null;
 }
 
 export class AuthService {
@@ -39,10 +41,11 @@ export class AuthService {
       name: 'bootstrap',
       prefix: secret.slice(0, 16),
       digest: this.#hasher.digest(secret),
+      scope: 'admin',
     });
   }
 
-  issue(kind: ApiKeyKind, name: string): IssuedApiKey {
+  issue(kind: ApiKeyKind, name: string, scope?: ControlScope | null): IssuedApiKey {
     const generated = this.#hasher.generate(kind);
     return {
       key: this.#store.createApiKey({
@@ -50,6 +53,7 @@ export class AuthService {
         name,
         prefix: generated.prefix,
         digest: generated.digest,
+        scope: kind === 'control' ? (scope ?? 'admin') : null,
       }),
       secret: generated.secret,
     };
@@ -66,7 +70,7 @@ export class AuthService {
       this.#store.touchApiKey(key.id);
       this.#lastTouched.set(key.id, timestamp);
     }
-    return { id: key.id, kind, name: key.name };
+    return { id: key.id, kind, name: key.name, scope: key.scope };
   }
 
   authenticateBearer(kind: ApiKeyKind, request: Request): AuthPrincipal {

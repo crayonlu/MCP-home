@@ -10,6 +10,10 @@ import type { MarketService } from '../market/market-service.js';
 import { controlOpenApi } from './openapi.js';
 
 const keyInputSchema = z.object({ name: z.string().min(1).max(120) });
+const controlKeyInputSchema = z.object({
+  name: z.string().min(1).max(120),
+  scope: z.enum(['admin', 'agent']).optional(),
+});
 
 interface HonoLike {
   use(
@@ -30,6 +34,8 @@ interface HonoContext {
     query(name: string): string | undefined;
     json(): Promise<unknown>;
   };
+  set(key: string, value: unknown): void;
+  get<T>(key: string): T | undefined;
 }
 
 export function mountControlApi(
@@ -49,6 +55,24 @@ export function mountControlApi(
     (handler: (context: HonoContext) => unknown | Promise<unknown>, status = 200) =>
     async (context: HonoContext): Promise<Response> => {
       try {
+        return jsonResponse(await handler(context), status);
+      } catch (error) {
+        return errorResponse(error, options.logger);
+      }
+    };
+
+  /** Reject agent-scoped control keys; the principal is set by the auth middleware. */
+  const requireAdmin = (context: HonoContext): void => {
+    const principal = context.get<{ scope: string | null }>('principal');
+    if (principal?.scope !== 'admin') {
+      throw new AppError('forbidden', 'This operation requires an admin control key', 403);
+    }
+  };
+  const adminRoute =
+    (handler: (context: HonoContext) => unknown | Promise<unknown>, status = 200) =>
+    async (context: HonoContext): Promise<Response> => {
+      try {
+        requireAdmin(context);
         return jsonResponse(await handler(context), status);
       } catch (error) {
         return errorResponse(error, options.logger);
@@ -79,15 +103,21 @@ export function mountControlApi(
     try {
       const token = bearerToken(context.req.raw);
       if (token) {
-        options.auth.authenticate('control', token);
+        context.set('principal', options.auth.authenticate('control', token));
       } else {
         const session = cookieValue(context.req.raw, 'mcp_home_session');
         if (!session) throw new AppError('unauthorized', 'Control credential required', 401);
-        const principal = await options.sessions.verify(session);
-        const key = options.store.getApiKey(principal.id, 'control');
+        const sessionPrincipal = await options.sessions.verify(session);
+        const key = options.store.getApiKey(sessionPrincipal.id, 'control');
         if (!key || key.revokedAt !== null) {
           throw new AppError('unauthorized', 'Control session credential was revoked', 401);
         }
+        context.set('principal', {
+          id: key.id,
+          kind: 'control' as const,
+          name: key.name,
+          scope: key.scope,
+        });
       }
       await next();
     } catch (error) {
@@ -132,7 +162,7 @@ export function mountControlApi(
   );
   app.delete(
     '/api/v1/servers/:id',
-    route(async (context) => {
+    adminRoute(async (context) => {
       await options.service.deleteServer(context.req.param('id'));
       return { deleted: true };
     }),
@@ -192,36 +222,36 @@ export function mountControlApi(
 
   app.get(
     '/api/v1/credentials',
-    route(() => options.service.listCredentials()),
+    adminRoute(() => options.service.listCredentials()),
   );
   app.post(
     '/api/v1/credentials',
-    route(async (context) => options.service.createCredential(await context.req.json()), 201),
+    adminRoute(async (context) => options.service.createCredential(await context.req.json()), 201),
   );
   app.get(
     '/api/v1/credentials/:id',
-    route((context) => options.service.getCredential(context.req.param('id'))),
+    adminRoute((context) => options.service.getCredential(context.req.param('id'))),
   );
   app.patch(
     '/api/v1/credentials/:id',
-    route(async (context) =>
+    adminRoute(async (context) =>
       options.service.updateCredential(context.req.param('id'), await context.req.json()),
     ),
   );
   app.delete(
     '/api/v1/credentials/:id',
-    route(async (context) => {
+    adminRoute(async (context) => {
       await options.service.deleteCredential(context.req.param('id'));
       return { deleted: true };
     }),
   );
   app.post(
     '/api/v1/credentials/:id/test',
-    route((context) => options.service.testCredential(context.req.param('id'))),
+    adminRoute((context) => options.service.testCredential(context.req.param('id'))),
   );
   app.post(
     '/api/v1/credentials/:id/authorize',
-    route(async (context) =>
+    adminRoute(async (context) =>
       options.service.authorizeCredential(
         context.req.param('id'),
         await readOptionalJson(context.req.raw),
@@ -230,11 +260,11 @@ export function mountControlApi(
   );
   app.post(
     '/api/v1/credentials/:id/revoke',
-    route((context) => options.service.revokeCredential(context.req.param('id'))),
+    adminRoute((context) => options.service.revokeCredential(context.req.param('id'))),
   );
 
-  mountKeyRoutes(app, route, options.service, 'control');
-  mountKeyRoutes(app, route, options.service, 'access');
+  mountKeyRoutes(app, adminRoute, options.service, 'control');
+  mountKeyRoutes(app, adminRoute, options.service, 'access');
 
   app.get(
     '/api/v1/overview',
@@ -260,9 +290,11 @@ export function mountControlApi(
   );
   app.get(
     '/api/v1/config/export',
-    route((context) =>
-      options.service.exportConfig(booleanQuery(context.req.query('includeSecrets'), false)),
-    ),
+    route((context) => {
+      const includeSecrets = booleanQuery(context.req.query('includeSecrets'), false);
+      if (includeSecrets) requireAdmin(context);
+      return options.service.exportConfig(includeSecrets);
+    }),
   );
   app.post(
     '/api/v1/config/import',
@@ -276,6 +308,7 @@ export function mountControlApi(
   const market = options.market;
   if (market) {
     app.get('/api/v1/market', route(() => market.list()));
+    app.get('/api/v1/market/installations', route(() => market.installations()));
     app.get(
       '/api/v1/market/install/:jobId',
       route((context) => market.getJob(context.req.param('jobId'))),
@@ -284,22 +317,55 @@ export function mountControlApi(
       '/api/v1/market/:id/install',
       route(async (context) => {
         const body = (await context.req.json()) as { values?: Record<string, string> };
-        return market.install(context.req.param('id'), body.values ?? {});
+        const principal = context.get<{ id: string }>('principal');
+        return market.install(context.req.param('id'), body.values ?? {}, principal?.id ?? 'cli');
       }),
     );
     app.post(
       '/api/v1/market/:id/uninstall',
-      route(async (context) => {
+      adminRoute(async (context) => {
         await market.uninstall(context.req.param('id'));
         return { uninstalled: true };
       }),
     );
   }
+
+  app.get(
+    '/api/v1/secure-actions/:id',
+    route(async (context) => {
+      if (!options.market) {
+        throw new AppError('secure_action_unavailable', 'Secure actions are unavailable', 404);
+      }
+      const principal = context.get<{ id: string }>('principal');
+      if (!principal) throw new AppError('unauthorized', 'Control credential required', 401);
+      return options.market.secureActionInfo(context.req.param('id'), principal.id);
+    }),
+  );
+  app.post(
+    '/api/v1/secure-actions/:id/complete',
+    route(async (context) => {
+      if (!options.market) {
+        throw new AppError('secure_action_unavailable', 'Secure actions are unavailable', 404);
+      }
+      const principal = context.get<{ id: string }>('principal');
+      if (!principal) throw new AppError('unauthorized', 'Control credential required', 401);
+      const body = (await context.req.json()) as {
+        token: string;
+        values: Record<string, string>;
+      };
+      return options.market.completeAction(
+        context.req.param('id'),
+        body.token,
+        principal.id,
+        body.values ?? {},
+      );
+    }),
+  );
 }
 
 function mountKeyRoutes(
   app: HonoLike,
-  route: (
+  adminRoute: (
     handler: (context: HonoContext) => unknown | Promise<unknown>,
     status?: number,
   ) => (context: HonoContext) => Promise<Response>,
@@ -309,18 +375,22 @@ function mountKeyRoutes(
   const path = kind === 'control' ? 'control-keys' : 'access-keys';
   app.get(
     `/api/v1/${path}`,
-    route(() => service.listKeys(kind)),
+    adminRoute(() => service.listKeys(kind)),
   );
   app.post(
     `/api/v1/${path}`,
-    route(async (context) => {
+    adminRoute(async (context) => {
+      if (kind === 'control') {
+        const input = controlKeyInputSchema.parse(await context.req.json());
+        return service.createKey(kind, input.name, input.scope ?? 'admin');
+      }
       const input = keyInputSchema.parse(await context.req.json());
       return service.createKey(kind, input.name);
     }, 201),
   );
   app.delete(
     `/api/v1/${path}/:id`,
-    route((context) => {
+    adminRoute((context) => {
       service.revokeKey(kind, context.req.param('id'));
       return { revoked: true };
     }),

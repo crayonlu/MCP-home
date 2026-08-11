@@ -10,10 +10,12 @@ import { useI18n } from '../../i18n'
 import { useTheme } from '../../app/theme'
 import { useToast } from '../../components/ui/Toast'
 import { useConfirm } from '../../components/ui/ConfirmDialog'
+import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Dialog } from '../../components/ui/Dialog'
 import { TextField, TextareaField } from '../../components/ui/Field'
 import { CopyButton } from '../../components/ui/CopyButton'
+import { SelectField } from '../../components/ui/SelectField'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -34,6 +36,7 @@ export function SettingsPage() {
   const createKey = useCreateControlKey()
   const revokeKey = useRevokeControlKey()
   const [keyName, setKeyName] = useState('')
+  const [keyScope, setKeyScope] = useState<'admin' | 'agent'>('admin')
   const [keyOpen, setKeyOpen] = useState(false)
   const [secret, setSecret] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
@@ -159,7 +162,12 @@ export function SettingsPage() {
             <div key={key.id} className="flex items-center gap-3 px-1 py-2">
               <KeySquare className="size-4 shrink-0 text-ink-3" />
               <div className="flex min-w-0 flex-1 flex-col">
-                <span className="text-sm text-ink">{key.name}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-ink">{key.name}</span>
+                  <Badge tone={key.scope === 'agent' ? 'accent' : 'neutral'}>
+                    {key.scope === 'agent' ? t('settings.scopeAgent') : t('settings.scopeAdmin')}
+                  </Badge>
+                </div>
                 <span className="font-mono text-xs text-ink-3">{key.prefix}</span>
               </div>
               <Button
@@ -185,12 +193,25 @@ export function SettingsPage() {
             </div>
           ))}
         </div>
-        <div>
+        <div className="flex flex-wrap gap-2">
           <Button variant="secondary" onClick={() => setKeyOpen(true)}>
             <ShieldAlert className="size-4" />
-            create
+            {t('settings.createControlKey')}
           </Button>
         </div>
+      </Section>
+
+      <Section title={t('settings.management')}>
+        <div className="flex items-center justify-between bg-surface px-4 py-3">
+          <div className="flex min-w-0 flex-col">
+            <span className="text-sm text-ink-2">{t('settings.managementEndpoint')}</span>
+            <code className="truncate font-mono text-xs text-ink-3">
+              {window.location.origin}/manage/mcp
+            </code>
+          </div>
+          <CopyButton text={`${window.location.origin}/manage/mcp`} />
+        </div>
+        <p className="text-xs text-ink-3">{t('settings.managementHint')}</p>
       </Section>
 
       <Section title={t('settings.rawApi')}>
@@ -234,13 +255,27 @@ export function SettingsPage() {
       </Section>
 
       <Dialog open={keyOpen} onOpenChange={setKeyOpen} title={t('settings.createControlKey')}>
-        <TextField
-          label={t('common.name')}
-          value={keyName}
-          onChange={setKeyName}
-          required
-          autoFocus
-        />
+        <div className="flex flex-col gap-3">
+          <TextField
+            label={t('common.name')}
+            value={keyName}
+            onChange={setKeyName}
+            required
+            autoFocus
+          />
+          <SelectField
+            label={t('settings.keyScope')}
+            value={keyScope}
+            onChange={(value) => setKeyScope(value as 'admin' | 'agent')}
+            options={[
+              { value: 'admin', label: t('settings.scopeAdmin') },
+              { value: 'agent', label: t('settings.scopeAgent') },
+            ]}
+          />
+          {keyScope === 'agent' && (
+            <p className="text-xs text-ink-3">{t('settings.scopeAgentHint')}</p>
+          )}
+        </div>
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="ghost" onClick={() => setKeyOpen(false)}>
             {t('common.cancel')}
@@ -250,14 +285,18 @@ export function SettingsPage() {
             loading={createKey.isPending}
             disabled={!keyName}
             onClick={() =>
-              createKey.mutate(keyName, {
-                onSuccess: (result) => {
-                  setKeyOpen(false)
-                  setKeyName('')
-                  setSecret(result.secret ?? null)
+              createKey.mutate(
+                { name: keyName, scope: keyScope },
+                {
+                  onSuccess: (result) => {
+                    setKeyOpen(false)
+                    setKeyName('')
+                    setKeyScope('admin')
+                    setSecret(result.secret ?? null)
+                  },
+                  onError: (error) => toast(error.message, 'error'),
                 },
-                onError: (error) => toast(error.message, 'error'),
-              })
+              )
             }
           >
             {t('common.create')}

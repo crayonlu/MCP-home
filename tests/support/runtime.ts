@@ -6,11 +6,12 @@ import { createApplication, type ApplicationRuntime } from '../../src/app.js';
 export interface TestRuntime {
   runtime: ApplicationRuntime;
   controlKey: string;
+  directory: string;
   close(): Promise<void>;
 }
 
-export function createTestRuntime(): TestRuntime {
-  const directory = mkdtempSync(join(tmpdir(), 'mcp-home-test-'));
+export function createTestRuntime(options?: { directory?: string; persist?: boolean }): TestRuntime {
+  const directory = options?.directory ?? mkdtempSync(join(tmpdir(), 'mcp-home-test-'));
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const controlKey = 'test-bootstrap-control-key-00000000000000000001';
   const runtime = createApplication({
@@ -30,9 +31,10 @@ export function createTestRuntime(): TestRuntime {
   return {
     runtime,
     controlKey,
+    directory,
     async close() {
       await runtime.close();
-      rmSync(directory, { recursive: true, force: true });
+      if (!options?.persist) rmSync(directory, { recursive: true, force: true });
     },
   };
 }

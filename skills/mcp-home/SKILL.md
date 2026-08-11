@@ -71,6 +71,8 @@ mcp-home access-key create laptop       # create an MCP Access Key for harnesses
 mcp-home endpoint aggregate             # show the aggregate endpoint URL
 mcp-home market list                    # browse the Market catalog
 mcp-home market install resend --set RESEND_API_KEY=re_xxx  # install from Market
+mcp-home calls list --limit 10                              # recent tool calls
+mcp-home calls stats                                        # call statistics
 ```
 
 ## Common Workflows
@@ -125,7 +127,28 @@ mcp-home market install fetch                           # uvx (Python, no config
 mcp-home market uninstall resend                        # remove
 ```
 
-Market installs are async with progress: the CLI shows `npm install` steps, the web console shows a live log.
+Market installs are async with progress: the CLI shows `npm install` steps, the web console shows a live log. Every curated entry is pinned to an exact artifact version (`package@x.y.z` / `package==x.y.z`); installs never drift with `latest`, and each install writes a persistent record (source, version, recipe revision). If an install needs a secret, the CLI/console prints a one-time action URL instead of accepting the secret on the command line.
+
+### Give an AI Agent Safe Management Access
+
+Create an **agent-scoped control key** (web console → Settings → Control Keys, or CLI):
+
+```bash
+mcp-home control-key create agent-key --scope agent
+```
+
+Agent keys can read state and run safe operations (enable/disable/refresh/restart, market install, tool visibility) but are denied credentials, control/access keys, secret exports, and server deletion (HTTP 403). Existing keys keep full admin scope.
+
+Point an agent's management MCP at:
+
+```json
+{
+  "url": "https://mcp.example.com/manage/mcp",
+  "headers": { "Authorization": "Bearer mch_ctl_agent..." }
+}
+```
+
+The management surface exposes `home_status`, `server_list`, `server_get`, `market_search`, `tool_list`, `calls_query`, and idempotent writes `server_set_enabled`, `server_refresh`, `server_restart`, `market_install`, `tool_set_visibility`. All writes are audited in the call log. The management endpoint never appears inside the `/mcp` aggregate.
 
 ### Connect a Harness
 

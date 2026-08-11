@@ -1,17 +1,27 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
-import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { marketCatalog, type MarketEntry } from './catalog.js'
 import { AppError } from '../domain/errors.js'
 import type { ControlService } from '../control/control-service.js'
-import type { CredentialPayload } from '../domain/models.js'
+import type { CredentialPayload, InstallJobRecord, MarketInstallation } from '../domain/models.js'
+import type { Store } from '../storage/store.js'
+import type { SecureActionService } from '../security/secure-action.js'
+import { fingerprint } from '../upstream/stable-json.js'
 
-export interface InstallJob {
+export interface InstallJobView {
   id: string
   entryId: string
-  status: 'installing' | 'completed' | 'failed'
+  status: InstallJobRecord['status']
   step: string
+  output: string
+  result?: unknown
+  error?: string
+  actionUrl?: string
+}
+
+interface LiveJob {
+  record: InstallJobRecord
   output: string
   result?: unknown
   error?: string
@@ -19,12 +29,23 @@ export interface InstallJob {
 
 export class MarketService {
   readonly #service: ControlService;
+  readonly #store: Store;
+  readonly #actions: SecureActionService;
   readonly #marketDir: string;
   readonly #uvEnv: Record<string, string>;
-  readonly #jobs = new Map<string, InstallJob>();
+  readonly #jobs = new Map<string, LiveJob>();
 
-  constructor(service: ControlService, marketDir: string, dataDir?: string, uvIndexUrl?: string) {
+  constructor(
+    service: ControlService,
+    store: Store,
+    actions: SecureActionService,
+    marketDir: string,
+    dataDir?: string,
+    uvIndexUrl?: string,
+  ) {
     this.#service = service;
+    this.#store = store;
+    this.#actions = actions;
     this.#marketDir = marketDir;
     const uvRoot = dataDir === undefined ? marketDir : join(dataDir, '.uv');
     this.#uvEnv = {
@@ -34,29 +55,67 @@ export class MarketService {
       UV_COMPILE_BYTECODE: '0',
       ...(uvIndexUrl === undefined ? {} : { UV_DEFAULT_INDEX: uvIndexUrl }),
     };
+    // A fresh process never carries in-flight installs; surface them as
+    // interrupted so they are visible and retryable instead of silently lost.
+    this.#store.markInterruptedInstallJobs();
   }
 
   list() {
     const servers = this.#service.listServers();
-    return marketCatalog.map((entry) => ({
-      ...entry,
-      installed: servers.some((server) => server.slug === entry.id),
-    }));
+    return marketCatalog.map((entry) => {
+      const installation = this.#store.getInstallation(entry.id);
+      return {
+        ...entry,
+        installed: servers.some((server) => server.slug === entry.id),
+        installedVersion: installation?.entryVersion ?? null,
+      };
+    });
   }
 
-  getJob(jobId: string): InstallJob {
-    const job = this.#jobs.get(jobId);
-    if (!job) throw new AppError('market_job_not_found', 'Install job not found', 404);
-    return job;
+  installations() {
+    return this.#store.listInstallations();
   }
 
-  async install(id: string, values: Record<string, string> = {}) {
+  getJob(jobId: string): InstallJobView {
+    const live = this.#jobs.get(jobId);
+    if (live) return this.#view(live);
+    const record = this.#store.getInstallJob(jobId);
+    if (!record) throw new AppError('market_job_not_found', 'Install job not found', 404);
+    return {
+      id: record.id,
+      entryId: record.entryId,
+      status: record.status,
+      step: record.step,
+      output: record.boundedOutput,
+      error: record.errorCode ?? undefined,
+    };
+  }
+
+  async install(
+    id: string,
+    values: Record<string, string> = {},
+    principalId = 'cli',
+  ): Promise<{
+    jobId: string | null;
+    status: string;
+    actionId?: string;
+    actionUrl?: string;
+    installed?: unknown;
+  }> {
     const entry = this.#entry(id);
-    if (this.#service.listServers().some((server) => server.slug === entry.id)) {
-      throw new AppError('market_installed', `Market entry "${id}" is already installed`, 409);
+    const existing = this.#store.getInstallation(entry.id);
+    if (existing) {
+      const server = this.#service.getServer(existing.serverId);
+      return {
+        jobId: null,
+        status: 'already_installed',
+        installed: server
+          ? { entryId: entry.id, version: existing.entryVersion, serverId: server.id, slug: server.slug }
+          : { entryId: entry.id, version: existing.entryVersion },
+      };
     }
     for (const requirement of entry.requires) {
-      if (requirement.required && !values[requirement.name]) {
+      if (requirement.required && !requirement.secret && !values[requirement.name]) {
         throw new AppError(
           'market_missing_value',
           `Missing required value ${requirement.name}`,
@@ -64,16 +123,74 @@ export class MarketService {
         );
       }
     }
-    const job: InstallJob = {
-      id: randomUUID(),
-      entryId: entry.id,
-      status: 'installing',
-      step: 'starting',
-      output: '',
-    };
-    this.#jobs.set(job.id, job);
+    const missingSecrets = entry.requires.filter(
+      (requirement) => requirement.required && requirement.secret && !values[requirement.name],
+    );
+    const requestedVersion = entry.version ?? null;
+
+    if (missingSecrets.length > 0) {
+      // URL-mode elicitation: never accept the secret through tool arguments.
+      const job = this.#createJob(entry, requestedVersion, 'awaiting_secret');
+      const { action, url } = this.#actions.create('market_install', job.record.id, principalId);
+      this.#updateRecord(job, { actionId: action.id });
+      return {
+        jobId: job.record.id,
+        status: 'awaiting_secret',
+        actionId: action.id,
+        actionUrl: url,
+      };
+    }
+
+    const job = this.#createJob(entry, requestedVersion, 'installing');
+    this.#update(job, { step: 'starting' });
     void this.#runInstall(entry, values, job);
-    return { jobId: job.id, status: 'installing' };
+    return { jobId: job.record.id, status: 'installing' };
+  }
+
+  /** Completes a URL-mode secret action and resumes the linked install job. */
+  async completeAction(
+    actionId: string,
+    token: string,
+    principalId: string,
+    values: Record<string, string>,
+  ): Promise<InstallJobView> {
+    const action = this.#actions.complete(actionId, token, principalId, values);
+    const jobId = action.target;
+    const live = this.#jobs.get(jobId);
+    if (live && live.record.status === 'awaiting_secret') {
+      const entry = this.#entry(live.record.entryId);
+      this.#update(live, { step: 'starting' });
+      void this.#runInstall(entry, values, live);
+      return this.#view(live);
+    }
+    const record = this.#store.getInstallJob(jobId);
+    if (!record || record.status !== 'awaiting_secret') {
+      throw new AppError('market_job_not_found', 'Install job not found or not awaiting a secret', 404);
+    }
+    return this.getJob(jobId);
+  }
+
+  /** Reads a pending action's required secret fields for the bound principal (web form). */
+  secureActionInfo(actionId: string, principalId: string) {
+    const action = this.#store.getSecureAction(actionId);
+    if (!action) throw new AppError('secure_action_not_found', 'Secure action not found', 404);
+    if (action.principalId !== principalId) {
+      throw new AppError('forbidden', 'Secure action belongs to another principal', 403);
+    }
+    const job = this.#store.getInstallJob(action.target);
+    const entry = job ? marketCatalog.find((item) => item.id === job.entryId) : undefined;
+    return {
+      actionId: action.id,
+      status: action.status,
+      entryId: entry?.id ?? null,
+      entryName: entry?.name ?? null,
+      fields: (entry?.requires ?? [])
+        .filter((requirement) => requirement.secret)
+        .map((requirement) => ({
+          name: requirement.name,
+          description: requirement.description,
+        })),
+    };
   }
 
   async uninstall(id: string) {
@@ -86,13 +203,59 @@ export class MarketService {
       if (server.credentialId) this.#service.deleteCredential(server.credentialId);
       this.#service.deleteServer(server.id);
     }
+    for (const installation of this.#store.listInstallations().filter((item) => item.entryId === entry.id)) {
+      this.#store.deleteInstallation(installation.id);
+    }
   }
 
-  #update(job: InstallJob, patch: Partial<InstallJob>) {
-    Object.assign(job, patch);
+  // ── internals ───────────────────────────────────────────────────────────
+
+  #createJob(entry: MarketEntry, requestedVersion: string | null, status: InstallJobRecord['status']): LiveJob {
+    const record = this.#store.createInstallJob({
+      entryId: entry.id,
+      requestedVersion,
+      idempotencyKey: `${entry.id}:${requestedVersion ?? 'latest'}`,
+      status,
+      step: status,
+      boundedOutput: '',
+      resultReference: null,
+      actionId: null,
+      errorCode: null,
+    });
+    const live: LiveJob = { record, output: '' };
+    this.#jobs.set(record.id, live);
+    return live;
   }
 
-  async #runInstall(entry: MarketEntry, values: Record<string, string>, job: InstallJob) {
+  #view(live: LiveJob): InstallJobView {
+    return {
+      id: live.record.id,
+      entryId: live.record.entryId,
+      status: live.record.status,
+      step: live.record.step,
+      output: live.output || live.record.boundedOutput,
+      ...(live.result === undefined ? {} : { result: live.result }),
+      ...(live.error === undefined ? {} : { error: live.error }),
+    };
+  }
+
+  #update(job: LiveJob, patch: { step?: string; output?: string; result?: unknown; error?: string }) {
+    if (patch.step !== undefined) {
+      this.#updateRecord(job, { step: patch.step });
+    }
+    if (patch.output !== undefined) {
+      job.output = patch.output;
+      this.#updateRecord(job, { boundedOutput: patch.output });
+    }
+    if (patch.result !== undefined) job.result = patch.result;
+    if (patch.error !== undefined) job.error = patch.error;
+  }
+
+  #updateRecord(job: LiveJob, patch: Partial<InstallJobRecord>) {
+    job.record = this.#store.updateInstallJob(job.record.id, patch);
+  }
+
+  async #runInstall(entry: MarketEntry, values: Record<string, string>, job: LiveJob) {
     try {
       if (entry.kind === 'home-stdio') {
         await this.#npmInstall(entry, job);
@@ -157,13 +320,30 @@ export class MarketService {
           credential,
         };
       }
-      this.#update(job, { status: 'completed', step: 'done', result });
-    } catch (error) {
-      this.#update(job, {
-        status: 'failed',
-        step: 'failed',
-        error: error instanceof Error ? error.message : String(error),
+      const server = (result as { server: { id: string } }).server;
+      const installation = this.#store.createInstallation({
+        source: 'curated',
+        entryId: entry.id,
+        entryVersion: entry.version ?? 'unpinned',
+        recipeRevision: fingerprint(entry),
+        serverId: server.id,
+        credentialId: credential.id,
       });
+      this.#update(job, { step: 'done', result: { ...(result as object), installation } });
+      this.#updateRecord(job, { status: 'completed', resultReference: installation.id });
+    } catch (error) {
+      try {
+        this.#update(job, {
+          step: 'failed',
+          error: error instanceof Error ? error.message : String(error),
+        });
+        this.#updateRecord(job, {
+          status: 'failed',
+          errorCode: error instanceof AppError ? error.code : 'market_install_failed',
+        });
+      } catch {
+        // The runtime may have been torn down mid-install; nothing to persist.
+      }
     }
   }
 
@@ -175,6 +355,12 @@ export class MarketService {
 
   #binPath(entry: MarketEntry): string {
     return join(this.#marketDir, 'node_modules', '.bin', entry.bin ?? entry.id);
+  }
+
+  #pinnedPackage(entry: MarketEntry, kind: 'npm' | 'uvx'): string {
+    const base = entry.package ?? entry.id;
+    if (!entry.version) return base;
+    return kind === 'uvx' ? `${base}==${entry.version}` : `${base}@${entry.version}`;
   }
 
   #credentialPayload(entry: MarketEntry, values: Record<string, string>): CredentialPayload {
@@ -204,10 +390,10 @@ export class MarketService {
     }
   }
 
-  #uvxInstall(entry: MarketEntry, job: InstallJob): Promise<void> {
+  #uvxInstall(entry: MarketEntry, job: LiveJob): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.#update(job, { step: `uv tool install ${entry.package ?? entry.id}` });
-      const args = ['tool', 'install', entry.package ?? entry.id];
+      this.#update(job, { step: `uv tool install ${this.#pinnedPackage(entry, 'uvx')}` });
+      const args = ['tool', 'install', this.#pinnedPackage(entry, 'uvx')];
       for (const dependency of entry.uvWith ?? []) args.push('--with', dependency);
       const child = spawn(
         'uv',
@@ -243,10 +429,10 @@ export class MarketService {
     });
   }
 
-  #npmInstall(entry: MarketEntry, job: InstallJob): Promise<void> {
+  #npmInstall(entry: MarketEntry, job: LiveJob): Promise<void> {
     return new Promise((resolve, reject) => {
       mkdirSync(this.#marketDir, { recursive: true });
-      this.#update(job, { step: `npm install ${entry.package ?? entry.id}` });
+      this.#update(job, { step: `npm install ${this.#pinnedPackage(entry, 'npm')}` });
       const child = spawn(
         'npm',
         [
@@ -255,7 +441,7 @@ export class MarketService {
           this.#marketDir,
           '--no-audit',
           '--no-fund',
-          entry.package ?? entry.id,
+          this.#pinnedPackage(entry, 'npm'),
         ],
         { stdio: ['ignore', 'pipe', 'pipe'] },
       );
@@ -288,3 +474,5 @@ export class MarketService {
     });
   }
 }
+
+export type { MarketInstallation }

@@ -20,7 +20,10 @@ import {
   createServerInputSchema,
   credentialPayloadSchema,
   credentialRecordSchema,
+  installJobRecordSchema,
+  marketInstallationSchema,
   runtimeStateSchema,
+  secureActionRecordSchema,
   serverProjectionSchema,
   serverRecordSchema,
   toolCallSchema,
@@ -34,7 +37,10 @@ import {
   type CredentialPayload,
   type CredentialRecord,
   type EventRecord,
+  type InstallJobRecord,
+  type MarketInstallation,
   type RuntimeState,
+  type SecureActionRecord,
   type ServerProjection,
   type ServerRecord,
   type ToolCallDraft,
@@ -85,6 +91,7 @@ const apiKeyRowSchema = z.object({
   name: z.string(),
   prefix: z.string(),
   digest: z.string(),
+  scope: z.string().nullable(),
   created_at: z.string(),
   last_used_at: z.string().nullable(),
   revoked_at: z.string().nullable(),
@@ -158,6 +165,44 @@ const toolCallRowSchema = z.object({
   started_at: z.string(),
   completed_at: z.string(),
   duration_ms: z.number(),
+});
+
+const installJobRowSchema = z.object({
+  id: z.string(),
+  entry_id: z.string(),
+  requested_version: z.string().nullable(),
+  idempotency_key: z.string(),
+  status: z.string(),
+  step: z.string(),
+  bounded_output: z.string(),
+  result_reference: z.string().nullable(),
+  action_id: z.string().nullable(),
+  error_code: z.string().nullable(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+const installationRowSchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  entry_id: z.string(),
+  entry_version: z.string(),
+  recipe_revision: z.string(),
+  server_id: z.string(),
+  credential_id: z.string().nullable(),
+  installed_at: z.string(),
+});
+
+const secureActionRowSchema = z.object({
+  id: z.string(),
+  kind: z.string(),
+  target: z.string(),
+  principal_id: z.string(),
+  status: z.string(),
+  values_json: z.string(),
+  expires_at: z.string(),
+  created_at: z.string(),
+  completed_at: z.string().nullable(),
 });
 
 function parseJson(value: string): unknown {
@@ -264,6 +309,7 @@ export class SqliteStore implements Store {
         name TEXT NOT NULL,
         prefix TEXT NOT NULL,
         digest TEXT NOT NULL UNIQUE,
+        scope TEXT DEFAULT 'admin' CHECK (scope IN ('admin', 'agent')),
         created_at TEXT NOT NULL,
         last_used_at TEXT,
         revoked_at TEXT
@@ -372,7 +418,57 @@ export class SqliteStore implements Store {
           SELECT id FROM tool_calls ORDER BY started_at DESC LIMIT -1 OFFSET 200000
         );
       END;
+
+      CREATE TABLE IF NOT EXISTS market_installations (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL CHECK (source IN ('curated', 'registry')),
+        entry_id TEXT NOT NULL,
+        entry_version TEXT NOT NULL,
+        recipe_revision TEXT NOT NULL,
+        server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        credential_id TEXT REFERENCES credentials(id) ON DELETE SET NULL,
+        installed_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_installations_entry ON market_installations(entry_id);
+
+      CREATE TABLE IF NOT EXISTS install_jobs (
+        id TEXT PRIMARY KEY,
+        entry_id TEXT NOT NULL,
+        requested_version TEXT,
+        idempotency_key TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL CHECK (status IN ('awaiting_secret', 'installing', 'completed', 'failed', 'interrupted')),
+        step TEXT NOT NULL,
+        bounded_output TEXT NOT NULL,
+        result_reference TEXT,
+        action_id TEXT,
+        error_code TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_install_jobs_status ON install_jobs(status, updated_at);
+
+      CREATE TABLE IF NOT EXISTS secure_actions (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        target TEXT NOT NULL,
+        principal_id TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('pending', 'completed', 'expired')),
+        values_json TEXT NOT NULL DEFAULT '{}',
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        completed_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_secure_actions_principal ON secure_actions(principal_id);
     `);
+    // Guarded migration for existing databases created before api_keys.scope existed.
+    const apiKeyColumns = this.#db
+      .prepare('PRAGMA table_info(api_keys)')
+      .all() as { name: string }[];
+    if (!apiKeyColumns.some((column) => column.name === 'scope')) {
+      this.#db.exec(
+        "ALTER TABLE api_keys ADD COLUMN scope TEXT DEFAULT 'admin' CHECK (scope IN ('admin', 'agent'))",
+      );
+    }
   }
 
   #verifyCredentialEncryption(): void {
@@ -631,10 +727,10 @@ export class SqliteStore implements Store {
     this.#db
       .prepare(
         `INSERT INTO api_keys
-        (id, kind, name, prefix, digest, created_at, last_used_at, revoked_at)
-        VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)`,
+        (id, kind, name, prefix, digest, scope, created_at, last_used_at, revoked_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
       )
-      .run(id, input.kind, input.name, input.prefix, input.digest, timestamp);
+      .run(id, input.kind, input.name, input.prefix, input.digest, input.scope ?? null, timestamp);
     const key = this.getApiKeyByDigest(input.kind, input.digest);
     if (!key) throw new Error('API key insert failed');
     const { digest: _digest, ...record } = key;
@@ -1013,6 +1109,184 @@ export class SqliteStore implements Store {
     return total;
   }
 
+  // ── Market install records & persistent jobs ───────────────────────────
+
+  listInstallations(): MarketInstallation[] {
+    return this.#db
+      .prepare('SELECT * FROM market_installations ORDER BY installed_at DESC')
+      .all()
+      .map((row) => this.#parseInstallation(row));
+  }
+
+  getInstallation(entryId: string): MarketInstallation | null {
+    const row = this.#db
+      .prepare('SELECT * FROM market_installations WHERE entry_id = ? ORDER BY installed_at DESC LIMIT 1')
+      .get(entryId);
+    return row === undefined ? null : this.#parseInstallation(row);
+  }
+
+  createInstallation(input: Omit<MarketInstallation, 'id' | 'installedAt'>): MarketInstallation {
+    const record = marketInstallationSchema.parse({
+      id: randomUUID(),
+      ...input,
+      installedAt: now(),
+    });
+    this.#db
+      .prepare(
+        `INSERT INTO market_installations
+         (id, source, entry_id, entry_version, recipe_revision, server_id, credential_id, installed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        record.id,
+        record.source,
+        record.entryId,
+        record.entryVersion,
+        record.recipeRevision,
+        record.serverId,
+        record.credentialId,
+        record.installedAt,
+      );
+    return record;
+  }
+
+  deleteInstallation(id: string): void {
+    this.#db.prepare('DELETE FROM market_installations WHERE id = ?').run(id);
+  }
+
+  createInstallJob(input: Omit<InstallJobRecord, 'id' | 'createdAt' | 'updatedAt'>): InstallJobRecord {
+    const timestamp = now();
+    const record = installJobRecordSchema.parse({
+      id: randomUUID(),
+      ...input,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    this.#db
+      .prepare(
+        `INSERT INTO install_jobs
+         (id, entry_id, requested_version, idempotency_key, status, step, bounded_output,
+          result_reference, action_id, error_code, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        record.id,
+        record.entryId,
+        record.requestedVersion,
+        record.idempotencyKey,
+        record.status,
+        record.step,
+        record.boundedOutput,
+        record.resultReference,
+        record.actionId,
+        record.errorCode,
+        record.createdAt,
+        record.updatedAt,
+      );
+    return record;
+  }
+
+  getInstallJob(id: string): InstallJobRecord | null {
+    const row = this.#db.prepare('SELECT * FROM install_jobs WHERE id = ?').get(id);
+    return row === undefined ? null : this.#parseInstallJob(row);
+  }
+
+  updateInstallJob(id: string, patch: Partial<InstallJobRecord>): InstallJobRecord {
+    const current = this.#db.prepare('SELECT * FROM install_jobs WHERE id = ?').get(id);
+    if (current === undefined) {
+      throw new AppError('market_job_not_found', 'Install job not found', 404);
+    }
+    const merged = installJobRecordSchema.parse({
+      ...this.#parseInstallJob(current),
+      ...patch,
+      updatedAt: now(),
+    });
+    this.#db
+      .prepare(
+        `UPDATE install_jobs SET
+           requested_version = ?, idempotency_key = ?, status = ?, step = ?,
+           bounded_output = ?, result_reference = ?, action_id = ?, error_code = ?,
+           updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        merged.requestedVersion,
+        merged.idempotencyKey,
+        merged.status,
+        merged.step,
+        merged.boundedOutput,
+        merged.resultReference,
+        merged.actionId,
+        merged.errorCode,
+        merged.updatedAt,
+        merged.id,
+      );
+    return merged;
+  }
+
+  markInterruptedInstallJobs(): number {
+    const result = this.#db
+      .prepare(
+        `UPDATE install_jobs
+         SET status = 'interrupted', step = 'interrupted', updated_at = ?
+         WHERE status IN ('awaiting_secret', 'installing')`,
+      )
+      .run(now());
+    return Number(result.changes);
+  }
+
+  // ── Secure actions (URL-mode secret elicitation) ───────────────────────
+
+  createSecureAction(input: Omit<SecureActionRecord, 'id' | 'createdAt'>): SecureActionRecord {
+    const record = secureActionRecordSchema.parse({
+      id: randomUUID(),
+      ...input,
+      createdAt: now(),
+    });
+    this.#db
+      .prepare(
+        `INSERT INTO secure_actions
+         (id, kind, target, principal_id, status, values_json, expires_at, created_at, completed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        record.id,
+        record.kind,
+        record.target,
+        record.principalId,
+        record.status,
+        record.valuesJson,
+        record.expiresAt,
+        record.createdAt,
+        record.completedAt,
+      );
+    return record;
+  }
+
+  getSecureAction(id: string): SecureActionRecord | null {
+    const row = this.#db.prepare('SELECT * FROM secure_actions WHERE id = ?').get(id);
+    return row === undefined ? null : this.#parseSecureAction(row);
+  }
+
+  updateSecureAction(id: string, patch: Partial<SecureActionRecord>): SecureActionRecord {
+    const current = this.#db.prepare('SELECT * FROM secure_actions WHERE id = ?').get(id);
+    if (current === undefined) {
+      throw new AppError('secure_action_not_found', 'Secure action not found', 404);
+    }
+    const merged = secureActionRecordSchema.parse({
+      ...this.#parseSecureAction(current),
+      ...patch,
+    });
+    this.#db
+      .prepare(
+        `UPDATE secure_actions SET
+           status = ?, values_json = ?, expires_at = ?, completed_at = ?
+         WHERE id = ?`,
+      )
+      .run(merged.status, merged.valuesJson, merged.expiresAt, merged.completedAt, merged.id);
+    return merged;
+  }
+
   #callWhere(filter: ToolCallFilter): {
     where: string;
     params: (string | number)[];
@@ -1087,6 +1361,53 @@ export class SqliteStore implements Store {
     });
   }
 
+  #parseInstallJob(row: unknown): InstallJobRecord {
+    const parsed = installJobRowSchema.parse(row);
+    return installJobRecordSchema.parse({
+      id: parsed.id,
+      entryId: parsed.entry_id,
+      requestedVersion: parsed.requested_version,
+      idempotencyKey: parsed.idempotency_key,
+      status: parsed.status,
+      step: parsed.step,
+      boundedOutput: parsed.bounded_output,
+      resultReference: parsed.result_reference,
+      actionId: parsed.action_id,
+      errorCode: parsed.error_code,
+      createdAt: parsed.created_at,
+      updatedAt: parsed.updated_at,
+    });
+  }
+
+  #parseInstallation(row: unknown): MarketInstallation {
+    const parsed = installationRowSchema.parse(row);
+    return marketInstallationSchema.parse({
+      id: parsed.id,
+      source: parsed.source,
+      entryId: parsed.entry_id,
+      entryVersion: parsed.entry_version,
+      recipeRevision: parsed.recipe_revision,
+      serverId: parsed.server_id,
+      credentialId: parsed.credential_id,
+      installedAt: parsed.installed_at,
+    });
+  }
+
+  #parseSecureAction(row: unknown): SecureActionRecord {
+    const parsed = secureActionRowSchema.parse(row);
+    return secureActionRecordSchema.parse({
+      id: parsed.id,
+      kind: parsed.kind,
+      target: parsed.target,
+      principalId: parsed.principal_id,
+      status: parsed.status,
+      valuesJson: parsed.values_json,
+      expiresAt: parsed.expires_at,
+      createdAt: parsed.created_at,
+      completedAt: parsed.completed_at,
+    });
+  }
+
   #parseServer(row: unknown): ServerRecord {
     const parsed = serverRowSchema.parse(row);
     return serverRecordSchema.parse({
@@ -1129,6 +1450,7 @@ export class SqliteStore implements Store {
       kind: parsed.kind,
       name: parsed.name,
       prefix: parsed.prefix,
+      scope: parsed.scope,
       createdAt: parsed.created_at,
       lastUsedAt: parsed.last_used_at,
       revokedAt: parsed.revoked_at,

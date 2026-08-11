@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -97,10 +97,23 @@ describe('market', () => {
     }
   });
 
-  it('rejects missing required values and unknown entries', async () => {
+  it('elicits secrets via URL and rejects missing non-secret values', async () => {
     const { runtime, controlKey, close } = createTestRuntime();
     try {
-      const missing = await controlRequest(runtime, controlKey, 'POST', '/api/v1/market/exa/install', {
+      // A required secret is elicited through a one-time action URL — never
+      // accepted through the install request itself.
+      const elicit = await controlRequest(runtime, controlKey, 'POST', '/api/v1/market/exa/install', {
+        values: {},
+      });
+      expect(elicit.status).toBe(200);
+      const body = (await elicit.json()) as { status: string; actionUrl: string };
+      expect(body.status).toBe('awaiting_secret');
+      expect(body.actionUrl).toMatch(/^http:\/\/mcp-home\.test\/market\/actions\//);
+      // The response carries only job + action URL — no secret, no values echo.
+      expect(Object.keys(body).sort()).toEqual(['actionId', 'actionUrl', 'jobId', 'status']);
+
+      // Missing non-secret required value is still a validation error.
+      const missing = await controlRequest(runtime, controlKey, 'POST', '/api/v1/market/sqlite/install', {
         values: {},
       });
       expect(missing.status).toBe(400);
@@ -118,7 +131,7 @@ describe('market', () => {
     }
   });
 
-  it('rejects installing the same entry twice', async () => {
+  it('is idempotent: reinstalling an entry reports already-installed without duplicates', async () => {
     const { runtime, controlKey, close } = createTestRuntime();
     try {
       await installEntry(runtime, controlKey, 'context7', { CONTEXT7_API_KEY: 'ctx-test' });
@@ -129,7 +142,19 @@ describe('market', () => {
         '/api/v1/market/context7/install',
         { values: { CONTEXT7_API_KEY: 'ctx-test' } },
       );
-      expect(second.status).toBe(409);
+      expect(second.status).toBe(200);
+      const body = (await second.json()) as { status: string };
+      expect(body.status).toBe('already_installed');
+      const servers = (await jsonResponse(
+        await controlRequest(runtime, controlKey, 'GET', '/api/v1/servers'),
+      )) as { slug: string }[];
+      expect(servers.filter((server) => server.slug === 'context7')).toHaveLength(1);
+      const installations = (await jsonResponse(
+        await controlRequest(runtime, controlKey, 'GET', '/api/v1/market/installations'),
+      )) as { entryId: string; entryVersion: string; source: string }[];
+      const row = installations.find((item) => item.entryId === 'context7');
+      expect(row?.source).toBe('curated');
+      expect(row?.entryVersion).toBe('unpinned');
     } finally {
       await close();
     }
@@ -161,11 +186,51 @@ describe('market', () => {
       }
       expect(credential.type).toBe('env');
       const recorded = readFileSync(argsLog, 'utf8');
-      expect(recorded).toContain('tool install mcp-server-fetch');
+      expect(recorded).toContain('tool install mcp-server-fetch==2026.7.10');
       expect(recorded).toContain('--with');
       expect(recorded).toContain('mcp<2');
+      const installations = (await jsonResponse(
+        await controlRequest(runtime, controlKey, 'GET', '/api/v1/market/installations'),
+      )) as { entryId: string; entryVersion: string; recipeRevision: string }[];
+      const row = installations.find((item) => item.entryId === 'fetch');
+      expect(row?.entryVersion).toBe('2026.7.10');
+      expect(row?.recipeRevision.length).toBeGreaterThan(10);
     } finally {
       await close();
+      process.env.PATH = previousPath;
+    }
+  });
+
+  it('marks install jobs interrupted across a process restart instead of losing them', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'mcp-home-uv-slow-'));
+    const uvPath = join(fakeBin, 'uv');
+    writeFileSync(uvPath, '#!/bin/sh\nsleep 60\nexit 0\n');
+    chmodSync(uvPath, 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${fakeBin}:${previousPath}`;
+    const directory = mkdtempSync(join(tmpdir(), 'mcp-home-restart-'));
+    const first = createTestRuntime({ directory, persist: true });
+    let jobId: string;
+    try {
+      const started = (await jsonResponse(
+        await controlRequest(first.runtime, first.controlKey, 'POST', '/api/v1/market/fetch/install', {}),
+      )) as { jobId: string; status: string };
+      expect(started.status).toBe('installing');
+      jobId = started.jobId;
+    } finally {
+      await first.close();
+    }
+    // A fresh runtime on the same data dir sees the interrupted job.
+    const second = createTestRuntime({ directory });
+    try {
+      const job = (await jsonResponse(
+        await controlRequest(second.runtime, second.controlKey, 'GET', `/api/v1/market/install/${jobId}`),
+      )) as { status: string };
+      expect(job.status).toBe('interrupted');
+    } finally {
+      await second.close();
+      rmSync(fakeBin, { recursive: true, force: true });
+      rmSync(directory, { recursive: true, force: true });
       process.env.PATH = previousPath;
     }
   });

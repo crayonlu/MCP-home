@@ -306,7 +306,10 @@ export class ControlService {
     return this.#store.listApiKeys(kind);
   }
 
-  createKey(kind: ApiKeyKind, name: string) {
+  createKey(kind: ApiKeyKind, name: string, scope?: 'admin' | 'agent') {
+    if (kind === 'control' && scope !== undefined) {
+      return this.#auth.issue('control', name, scope);
+    }
     return this.#auth.issue(kind, name);
   }
 

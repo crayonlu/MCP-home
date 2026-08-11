@@ -17,6 +17,7 @@ import { DiagnosticsPage } from './features/diagnostics/DiagnosticsPage'
 import { EventsPage } from './features/events/EventsPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { MarketPage } from './features/market/MarketPage'
+import { SecureActionPage } from './features/market/SecureActionPage'
 import { CallsPage } from './features/calls/CallsPage'
 
 const queryClient = new QueryClient({
@@ -65,6 +66,7 @@ export function App() {
                   <Route path="/credentials" element={<CredentialsPage />} />
                   <Route path="/access-keys" element={<AccessKeysPage />} />
                   <Route path="/market" element={<MarketPage />} />
+                  <Route path="/market/actions/:actionId" element={<SecureActionPage />} />
                   <Route path="/endpoints" element={<EndpointsPage />} />
                   <Route path="/diagnostics" element={<DiagnosticsPage />} />
                   <Route path="/events" element={<EventsPage />} />

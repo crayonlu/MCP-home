@@ -6,6 +6,7 @@ import { DataPlane } from './data-plane/data-plane.js';
 import { GatewayServerFactory } from './data-plane/gateway-server.js';
 import { CapabilityRegistry } from './data-plane/registry.js';
 import { ToolProjectionService } from './data-plane/projection.js';
+import { ManagementMCP } from './manage/management-mcp.js';
 import { createLogger, type Logger } from './observability/logger.js';
 import { CallRecorder } from './observability/call-recorder.js';
 import { MarketService } from './market/market-service.js';
@@ -16,6 +17,7 @@ import { CursorCodec } from './security/cursor-codec.js';
 import { mountOAuthRoutes } from './security/oauth-routes.js';
 import { OAuthServer } from './security/oauth-server.js';
 import { SecretBox } from './security/secret-box.js';
+import { SecureActionService } from './security/secure-action.js';
 import { SqliteStore } from './storage/sqlite-store.js';
 import type { Store } from './storage/store.js';
 import { CredentialResolver } from './upstream/credential-resolver.js';
@@ -78,6 +80,15 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
     () => dataPlane.registryChanged(),
     upstreamOAuth,
   );
+  const secureActions = new SecureActionService(store, config.masterKey, config.publicUrl);
+  const market = new MarketService(
+    control,
+    store,
+    secureActions,
+    config.marketDir,
+    config.dataDir,
+    config.uvIndexUrl,
+  );
   mountControlApi(app, {
     service: control,
     auth,
@@ -86,8 +97,17 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
     publicUrl: config.publicUrl,
     secureCookies: config.publicUrl.protocol === 'https:',
     logger,
-    market: new MarketService(control, config.marketDir, config.dataDir, config.uvIndexUrl),
+    market,
   });
+  const management = new ManagementMCP({
+    service: control,
+    market,
+    store,
+    auth,
+    recorder: callRecorder,
+    publicUrl: config.publicUrl,
+  });
+  app.all('/manage/mcp', (context) => management.serve(context.req.raw));
   mountOAuthRoutes(app, {
     oauth,
     registry,
@@ -108,6 +128,7 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
       if (
         path.startsWith('/api') ||
         path.startsWith('/mcp') ||
+        path.startsWith('/manage') ||
         path.startsWith('/oauth') ||
         path === '/healthz' ||
         path === '/readyz'
@@ -149,6 +170,7 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
     upstreams,
     dataPlane,
     async close() {
+      await management.close();
       await dataPlane.close();
       await upstreams.close();
       await callRecorder.close();

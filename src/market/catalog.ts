@@ -20,6 +20,8 @@ export interface MarketEntry {
   kind: 'home-stdio' | 'remote' | 'uvx'
   package?: string
   bin?: string
+  /** Pinned exact artifact version (npm `@x.y.z`, uvx `==x.y.z`); installs never drift with latest */
+  version?: string
   url?: string
   /** Extra dependencies pinned into the uv tool env (e.g. ["mcp<2"]) to work around upstream breaks */
   uvWith?: string[]
@@ -246,6 +248,7 @@ export const marketCatalog: MarketEntry[] = [
     category: 'email',
     kind: 'home-stdio',
     package: 'resend-mcp',
+    version: '2.12.0',
     bin: 'resend-mcp',
     credential: { type: 'env' },
     requires: [
@@ -260,6 +263,7 @@ export const marketCatalog: MarketEntry[] = [
     category: 'infra',
     kind: 'home-stdio',
     package: '@hexsleeves/tailscale-mcp-server',
+    version: '1.3.4',
     bin: 'tailscale-mcp-server',
     credential: { type: 'env' },
     requires: [
@@ -279,6 +283,7 @@ export const marketCatalog: MarketEntry[] = [
     category: 'browser',
     kind: 'home-stdio',
     package: '@playwright/mcp',
+    version: '0.0.79',
     bin: 'playwright-mcp',
     credential: { type: 'env' },
     requires: [],
@@ -291,6 +296,7 @@ export const marketCatalog: MarketEntry[] = [
     category: 'data',
     kind: 'home-stdio',
     package: '@modelcontextprotocol/server-postgres',
+    version: '0.6.2',
     bin: 'mcp-server-postgres',
     credential: { type: 'env' },
     requires: [
@@ -309,12 +315,13 @@ export const marketCatalog: MarketEntry[] = [
     name: 'SQLite',
     description: 'Query local SQLite databases',
     category: 'data',
-    kind: 'home-stdio',
-    package: '@modelcontextprotocol/server-sqlite',
+    kind: 'uvx',
+    package: 'mcp-server-sqlite',
+    version: '2025.4.25',
     bin: 'mcp-server-sqlite',
     credential: { type: 'env' },
     requires: [{ name: 'DB_PATH', description: 'Path to the SQLite database file', required: true }],
-    argsTemplate: ['${DB_PATH}'],
+    argsTemplate: ['--db', '${DB_PATH}'],
     docs: 'https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite',
   },
   {
@@ -324,6 +331,7 @@ export const marketCatalog: MarketEntry[] = [
     category: 'ai',
     kind: 'home-stdio',
     package: '@modelcontextprotocol/server-memory',
+    version: '2026.7.4',
     bin: 'mcp-server-memory',
     credential: { type: 'env' },
     requires: [],
@@ -336,6 +344,7 @@ export const marketCatalog: MarketEntry[] = [
     category: 'ai',
     kind: 'home-stdio',
     package: '@modelcontextprotocol/server-sequential-thinking',
+    version: '2026.7.4',
     bin: 'mcp-server-sequential-thinking',
     credential: { type: 'env' },
     requires: [],
@@ -348,6 +357,7 @@ export const marketCatalog: MarketEntry[] = [
     category: 'search',
     kind: 'uvx',
     package: 'mcp-server-fetch',
+    version: '2026.7.10',
     bin: 'mcp-server-fetch',
     // mcp-server-fetch 2026.7.10 imports McpError which was renamed in mcp>=2.0
     uvWith: ['mcp<2'],

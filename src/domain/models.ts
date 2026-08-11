@@ -218,11 +218,15 @@ export const updateCredentialInputSchema = z.object({
 
 export const apiKeyKindSchema = z.enum(['control', 'access']);
 
+export const controlScopeSchema = z.enum(['admin', 'agent']);
+export type ControlScope = z.infer<typeof controlScopeSchema>;
+
 export const apiKeyRecordSchema = z.object({
   id: z.uuid(),
   kind: apiKeyKindSchema,
   name: z.string().min(1).max(120),
   prefix: z.string(),
+  scope: controlScopeSchema.nullable().default(null),
   createdAt: z.iso.datetime(),
   lastUsedAt: z.iso.datetime().nullable(),
   revokedAt: z.iso.datetime().nullable(),
@@ -391,3 +395,61 @@ export interface ToolCallStats {
   topTools: { tool: string; count: number }[];
   topFailing: { tool: string; errorType: string | null; count: number }[];
 }
+
+// ── Market install records & persistent jobs ──────────────────────────────
+
+export const installJobStatusSchema = z.enum([
+  'awaiting_secret',
+  'installing',
+  'completed',
+  'failed',
+  'interrupted',
+]);
+export type InstallJobStatus = z.infer<typeof installJobStatusSchema>;
+
+export const installJobRecordSchema = z.object({
+  id: z.uuid(),
+  entryId: z.string().min(1),
+  requestedVersion: z.string().nullable(),
+  idempotencyKey: z.string().min(1),
+  status: installJobStatusSchema,
+  step: z.string(),
+  boundedOutput: z.string(),
+  resultReference: z.string().nullable(),
+  actionId: z.uuid().nullable(),
+  errorCode: z.string().nullable(),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+});
+export type InstallJobRecord = z.infer<typeof installJobRecordSchema>;
+
+export const marketInstallationSchema = z.object({
+  id: z.uuid(),
+  source: z.enum(['curated', 'registry']),
+  entryId: z.string().min(1),
+  entryVersion: z.string(),
+  recipeRevision: z.string(),
+  serverId: z.uuid(),
+  credentialId: z.uuid().nullable(),
+  installedAt: z.iso.datetime(),
+});
+export type MarketInstallation = z.infer<typeof marketInstallationSchema>;
+
+// ── Secure actions (URL-mode secret elicitation) ──────────────────────────
+
+export const secureActionStatusSchema = z.enum(['pending', 'completed', 'expired']);
+export type SecureActionStatus = z.infer<typeof secureActionStatusSchema>;
+
+export const secureActionRecordSchema = z.object({
+  id: z.uuid(),
+  kind: z.enum(['market_install']),
+  target: z.string().min(1),
+  principalId: z.string().min(1),
+  status: secureActionStatusSchema,
+  valuesJson: z.string().default('{}'),
+  expiresAt: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+  completedAt: z.iso.datetime().nullable(),
+});
+export type SecureActionRecord = z.infer<typeof secureActionRecordSchema>;
+

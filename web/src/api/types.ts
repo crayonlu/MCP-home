@@ -65,6 +65,7 @@ export interface ApiKeyRecord {
   kind: 'control' | 'access'
   name: string
   prefix: string
+  scope: 'admin' | 'agent' | null
   createdAt: string
 }
 

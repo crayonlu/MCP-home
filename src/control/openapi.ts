@@ -228,6 +228,38 @@ export function controlOpenApi(publicUrl: URL): Record<string, unknown> {
   add('/api/v1/endpoints/aggregate', 'get', 'getAggregateEndpoint', {
     summary: 'Read the aggregate MCP endpoint',
   });
+  add('/api/v1/market', 'get', 'listMarket', {
+    summary: 'List the curated market catalog with install state',
+  });
+  add('/api/v1/market/installations', 'get', 'listMarketInstallations', {
+    summary: 'List recorded market installs (source, version, recipe)',
+  });
+  add('/api/v1/market/install/{job_id}', 'get', 'getMarketInstallJob', {
+    summary: 'Read an async market install job',
+    parameters: [{ name: 'job_id', in: 'path', required: true, schema: { type: 'string' } }],
+  });
+  add('/api/v1/market/{entry_id}/install', 'post', 'installMarketEntry', {
+    summary: 'Install a curated entry; returns a one-time action URL when a secret is required',
+    parameters: [{ name: 'entry_id', in: 'path', required: true, schema: { type: 'string' } }],
+    body: true,
+  });
+  add('/api/v1/market/{entry_id}/uninstall', 'post', 'uninstallMarketEntry', {
+    summary: 'Uninstall a curated entry (admin)',
+    parameters: [{ name: 'entry_id', in: 'path', required: true, schema: { type: 'string' } }],
+  });
+  add('/api/v1/secure-actions/{action_id}', 'get', 'getSecureAction', {
+    summary: 'Read a pending secure action and its required secret fields',
+    parameters: [{ name: 'action_id', in: 'path', required: true, schema: { type: 'string' } }],
+  });
+  add('/api/v1/secure-actions/{action_id}/complete', 'post', 'completeSecureAction', {
+    summary: 'Complete a one-time secure action, storing secrets and resuming the install',
+    parameters: [{ name: 'action_id', in: 'path', required: true, schema: { type: 'string' } }],
+    body: true,
+  });
+  add('/api/v1/control-keys', 'post', 'createControlKey', {
+    summary: 'Create a control key with an admin or agent scope',
+    body: true,
+  });
 
   return {
     openapi: '3.1.0',

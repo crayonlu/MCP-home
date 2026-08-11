@@ -36,7 +36,7 @@ export class ControlSessionService {
         audience: 'mcp-home-control',
       });
       const claims = claimsSchema.parse(result.payload);
-      return { id: claims.sub, name: claims.name, kind: 'control' };
+      return { id: claims.sub, name: claims.name, kind: 'control', scope: null };
     } catch {
       throw new AppError('unauthorized', 'Control session is invalid or expired', 401);
     }

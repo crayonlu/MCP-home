@@ -250,7 +250,12 @@ market
     run(async (client, id: string, options: { set: Record<string, string> }) => {
       const started = (await client.request('POST', `/api/v1/market/${id}/install`, {
         values: options.set,
-      })) as { jobId: string };
+      })) as { jobId: string; status: string; actionUrl?: string };
+      if (started.status === 'awaiting_secret' && started.actionUrl) {
+        process.stdout.write(
+          `This entry needs a secret. Open this one-time URL in your browser to continue:\n${started.actionUrl}\n`,
+        );
+      }
       for (;;) {
         const job = (await client.request('GET', `/api/v1/market/install/${started.jobId}`)) as {
           status: string;
@@ -260,7 +265,11 @@ market
         };
         if (job.status !== 'installing') {
           if (job.status === 'failed') throw new Error(job.error ?? 'Install failed');
-          return job.result;
+          if (job.status === 'awaiting_secret') {
+            process.stdout.write('\rwaiting for secret in browser…   ');
+          } else {
+            return job.result;
+          }
         }
         process.stdout.write(`\rinstalling: ${job.step}…   `);
         await sleep(1500);

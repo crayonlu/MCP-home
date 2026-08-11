@@ -53,6 +53,8 @@ jobs:
         run: |
           npm ci
           npm run build
+      - name: Curated install smoke test
+        run: npm run smoke:market
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Log in to GHCR

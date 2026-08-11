@@ -41,7 +41,8 @@
     "test:unit": "vitest run --config vitest.config.ts tests/unit",
     "test:integration": "vitest run --config vitest.config.ts tests/integration",
     "test:real": "tsx scripts/real-environment.ts",
-    "test:all": "npm run format:check && npm run build && npm run test && npm run test:real"
+    "test:all": "npm run format:check && npm run build && npm run test && npm run test:real",
+    "smoke:market": "tsx scripts/smoke-market.ts"
   },
   "dependencies": {
     "@hono/node-server": "2.1.0",
