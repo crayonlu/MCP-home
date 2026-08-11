@@ -23,6 +23,31 @@ describe('CallChart', () => {
     expect(container.querySelector('svg')).not.toBeNull()
   })
 
+  it('builds well-formed points attributes (coordinate pairs, not path commands)', () => {
+    const { container } = render(
+      <I18nProvider>
+        <CallChart
+          points={[
+            { bucket: '2026-08-11T10:00:00.000Z', total: 4, success: 3, error: 1 },
+            { bucket: '2026-08-11T11:00:00.000Z', total: 8, success: 6, error: 2 },
+          ]}
+          bucketSeconds={3600}
+        />
+      </I18nProvider>,
+    )
+    for (const element of Array.from(container.querySelectorAll('polyline, polygon'))) {
+      const points = element.getAttribute('points') ?? ''
+      expect(points).not.toContain('M')
+      expect(points).not.toContain('L')
+      expect(points).not.toContain('Z')
+      const pairs = points.trim().split(/\s+/)
+      expect(pairs.length).toBeGreaterThan(0)
+      for (const pair of pairs) {
+        expect(pair).toMatch(/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/)
+      }
+    }
+  })
+
   it('renders a placeholder for empty data', () => {
     const { container } = render(
       <I18nProvider>

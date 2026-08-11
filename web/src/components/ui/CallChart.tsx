@@ -41,19 +41,13 @@ export function CallChart({
   const y = (value: number) => VIEW_H - (value / max) * VIEW_H
   const x = (index: number) => (points.length <= 1 ? VIEW_W / 2 : (index / (points.length - 1)) * VIEW_W)
 
-  const { areaPath, totalPath, errorPath } = useMemo(() => {
-    if (points.length === 0) return { areaPath: '', totalPath: '', errorPath: '' }
-    const area = points
-      .map((point, index) => `${index === 0 ? 'M' : 'L'}${x(index)},${y(point.total)}`)
-      .join(' ')
-    const close = ` L${x(points.length - 1)},${VIEW_H} L${x(0)},${VIEW_H} Z`
-    const total = points
-      .map((point, index) => `${index === 0 ? 'M' : 'L'}${x(index)},${y(point.total)}`)
-      .join(' ')
-    const error = points
-      .map((point, index) => `${index === 0 ? 'M' : 'L'}${x(index)},${y(point.error)}`)
-      .join(' ')
-    return { areaPath: `${area}${close}`, totalPath: total, errorPath: error }
+  const { areaPoints, totalPoints, errorPoints } = useMemo(() => {
+    if (points.length === 0) return { areaPoints: '', totalPoints: '', errorPoints: '' }
+    const line = (key: 'total' | 'error') =>
+      points.map((point, index) => `${x(index)},${y(point[key])}`).join(' ')
+    const total = line('total')
+    const area = `${total} ${x(points.length - 1)},${VIEW_H} ${x(0)},${VIEW_H}`
+    return { areaPoints: area, totalPoints: total, errorPoints: line('error') }
   }, [points, max])
 
   if (points.length === 0) {
@@ -100,19 +94,19 @@ export function CallChart({
                 vectorEffect="non-scaling-stroke"
               />
             ))}
-            {areaPath && (
+            {areaPoints && (
               <polygon
-                points={areaPath}
+                points={areaPoints}
                 className="fill-[var(--mch-accent)] opacity-[0.08]"
               />
             )}
             <polyline
-              points={totalPath}
+              points={totalPoints}
               className="fill-none stroke-[var(--mch-accent)] stroke-2"
               vectorEffect="non-scaling-stroke"
             />
             <polyline
-              points={errorPath}
+              points={errorPoints}
               className="fill-none stroke-[var(--mch-danger)] stroke-[1.5]"
               vectorEffect="non-scaling-stroke"
             />
