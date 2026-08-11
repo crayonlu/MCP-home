@@ -63,6 +63,23 @@ mcp-home server delete <fetch-server-id>
 mcp-home market install fetch
 ```
 
+## Fetch Server "Unreachable" with `ImportError: McpError`
+
+**Symptom**: The uvx-installed fetch server shows unreachable with `ImportError: cannot import name 'McpError' from 'mcp.shared.exceptions'`.
+
+**Cause**: `mcp-server-fetch` (2026.7.10) still imports the pre-2.0 `McpError` name; uv resolves the latest `mcp==2.0` which renamed it to `MCPError`. This is an upstream compatibility break.
+
+**Fix**: Reinstall with the pinned dependency (the catalog already ships `uvWith: ['mcp<2']`):
+```bash
+mcp-home market uninstall fetch
+mcp-home market install fetch
+```
+If upgrading an existing broken install without the pin, fix the tool env directly:
+```bash
+docker exec mcp-home sh -c 'uv tool install mcp-server-fetch --with "mcp<2"'
+mcp-home server restart fetch
+```
+
 ## Cloudflare Proxy SSE Delay (~25s per request)
 
 **Symptom**: Every MCP request (initialize, tools/list, tools/call) takes ~25s through Cloudflare, but works fine direct.

@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -138,7 +138,8 @@ describe('market', () => {
   it('installs a uvx entry via uv tool install', async () => {
     const fakeBin = mkdtempSync(join(tmpdir(), 'mcp-home-uv-'));
     const uvPath = join(fakeBin, 'uv');
-    writeFileSync(uvPath, '#!/bin/sh\nexit 0\n');
+    const argsLog = join(fakeBin, 'uv-args.log');
+    writeFileSync(uvPath, `#!/bin/sh\necho "$@" > "${argsLog}"\nexit 0\n`);
     chmodSync(uvPath, 0o755);
     const previousPath = process.env.PATH;
     process.env.PATH = `${fakeBin}:${previousPath}`;
@@ -159,6 +160,10 @@ describe('market', () => {
         expect(server.transport.env?.UV_TOOL_DIR).toBeDefined();
       }
       expect(credential.type).toBe('env');
+      const recorded = readFileSync(argsLog, 'utf8');
+      expect(recorded).toContain('tool install mcp-server-fetch');
+      expect(recorded).toContain('--with');
+      expect(recorded).toContain('mcp<2');
     } finally {
       await close();
       process.env.PATH = previousPath;

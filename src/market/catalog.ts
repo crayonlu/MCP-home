@@ -21,6 +21,8 @@ export interface MarketEntry {
   package?: string
   bin?: string
   url?: string
+  /** Extra dependencies pinned into the uv tool env (e.g. ["mcp<2"]) to work around upstream breaks */
+  uvWith?: string[]
   credential: CredentialSpec
   requires: MarketRequirement[]
   argsTemplate?: string[]
@@ -347,6 +349,8 @@ export const marketCatalog: MarketEntry[] = [
     kind: 'uvx',
     package: 'mcp-server-fetch',
     bin: 'mcp-server-fetch',
+    // mcp-server-fetch 2026.7.10 imports McpError which was renamed in mcp>=2.0
+    uvWith: ['mcp<2'],
     credential: { type: 'env' },
     requires: [],
     docs: 'https://github.com/modelcontextprotocol/servers/tree/main/src/fetch',

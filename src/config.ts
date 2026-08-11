@@ -31,6 +31,10 @@ const envSchema = z
     MCP_HOME_OAUTH_URL_CLIENT_ID: z.enum(['true', 'false']).default('true'),
     MCP_HOME_WEB_DIR: z.string().optional(),
     MCP_HOME_MARKET_DIR: z.string().optional(),
+    MCP_HOME_UV_INDEX_URL: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.url().optional(),
+    ),
   })
   .superRefine((value, context) => {
     if (value.MCP_HOME_BOOTSTRAP_CONTROL_KEY === value.MCP_HOME_MASTER_KEY) {
@@ -55,6 +59,7 @@ export interface RuntimeConfig {
   oauthUrlClientId: boolean;
   webDir?: string;
   marketDir: string;
+  uvIndexUrl?: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
@@ -83,5 +88,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
       ? {}
       : { webDir: resolve(parsed.MCP_HOME_WEB_DIR) }),
     marketDir: resolve(parsed.MCP_HOME_MARKET_DIR ?? join(dataDir, 'market')),
+    ...(parsed.MCP_HOME_UV_INDEX_URL === undefined
+      ? {}
+      : { uvIndexUrl: parsed.MCP_HOME_UV_INDEX_URL.toString() }),
   };
 }

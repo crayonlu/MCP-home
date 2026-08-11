@@ -75,7 +75,7 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
     publicUrl: config.publicUrl,
     secureCookies: config.publicUrl.protocol === 'https:',
     logger,
-    market: new MarketService(control, config.marketDir, config.dataDir),
+    market: new MarketService(control, config.marketDir, config.dataDir, config.uvIndexUrl),
   });
   mountOAuthRoutes(app, {
     oauth,

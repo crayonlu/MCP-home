@@ -37,7 +37,7 @@ mcp-home market uninstall resend
 
 **Home-stdio entries**: Runs `npm install --prefix <marketDir> <package>`, creates an env credential, and creates a home server with the stdio command pointing to the installed binary. The install is async with progress logging.
 
-**Uvx entries**: Runs `uv tool install <package>` (Python packages from PyPI), then creates a home server with the stdio command `uvx <package>`. Requires the `uv` runtime, which is bundled in the Docker image.
+**Uvx entries**: Runs `uv tool install <package>` (Python packages from PyPI), then creates a home server with the stdio command `uvx <package>`. Requires the `uv` runtime, which is bundled in the Docker image. Some entries pin extra dependencies via `--with` (e.g. `mcp-server-fetch` pins `mcp<2` because upstream still imports the pre-2.0 `McpError` name).
 
 ### Install Location
 

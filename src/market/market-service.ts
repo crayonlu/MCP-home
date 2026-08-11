@@ -23,7 +23,7 @@ export class MarketService {
   readonly #uvEnv: Record<string, string>;
   readonly #jobs = new Map<string, InstallJob>();
 
-  constructor(service: ControlService, marketDir: string, dataDir?: string) {
+  constructor(service: ControlService, marketDir: string, dataDir?: string, uvIndexUrl?: string) {
     this.#service = service;
     this.#marketDir = marketDir;
     const uvRoot = dataDir === undefined ? marketDir : join(dataDir, '.uv');
@@ -32,6 +32,7 @@ export class MarketService {
       UV_TOOL_DIR: join(uvRoot, 'tools'),
       UV_TOOL_BIN_DIR: join(uvRoot, 'tools', 'bin'),
       UV_COMPILE_BYTECODE: '0',
+      ...(uvIndexUrl === undefined ? {} : { UV_DEFAULT_INDEX: uvIndexUrl }),
     };
   }
 
@@ -206,9 +207,11 @@ export class MarketService {
   #uvxInstall(entry: MarketEntry, job: InstallJob): Promise<void> {
     return new Promise((resolve, reject) => {
       this.#update(job, { step: `uv tool install ${entry.package ?? entry.id}` });
+      const args = ['tool', 'install', entry.package ?? entry.id];
+      for (const dependency of entry.uvWith ?? []) args.push('--with', dependency);
       const child = spawn(
         'uv',
-        ['tool', 'install', entry.package ?? entry.id],
+        args,
         { env: { ...process.env, ...this.#uvEnv }, stdio: ['ignore', 'pipe', 'pipe'] },
       );
       let output = '';

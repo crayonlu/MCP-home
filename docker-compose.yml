@@ -16,6 +16,7 @@ services:
       MCP_HOME_ALLOWED_HOSTS: ${MCP_HOME_ALLOWED_HOSTS:-127.0.0.1,localhost}
       MCP_HOME_LOG_LEVEL: ${MCP_HOME_LOG_LEVEL:-info}
       MCP_HOME_OAUTH_URL_CLIENT_ID: ${MCP_HOME_OAUTH_URL_CLIENT_ID:-true}
+      MCP_HOME_UV_INDEX_URL: ${MCP_HOME_UV_INDEX_URL:-}
     volumes:
       - mcp-home-data:/data
 
