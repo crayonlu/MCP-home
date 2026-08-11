@@ -323,6 +323,19 @@ describe('management MCP', () => {
         ),
       )) as { entryId: string; source: string }[];
       expect(installations.find((item) => item.entryId === 'context7')?.source).toBe('curated');
+
+      // Series endpoint returns zero-filled buckets for the chart.
+      const now = Date.now();
+      const series = (await jsonResponse(
+        await controlRequest(
+          testRuntime.runtime,
+          control.secret,
+          'GET',
+          `/api/v1/calls/series?bucket=1h&from=${encodeURIComponent(new Date(now - 3 * 3_600_000).toISOString())}&to=${encodeURIComponent(new Date(now).toISOString())}`,
+        ),
+      )) as { bucketSeconds: number; points: { bucket: string; total: number }[] };
+      expect(series.bucketSeconds).toBe(3600);
+      expect(series.points.length).toBeGreaterThanOrEqual(3);
     } finally {
       for (const client of clients) await client.close().catch(() => undefined);
       await testRuntime.close();

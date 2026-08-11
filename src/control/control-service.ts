@@ -593,14 +593,16 @@ export class ControlService {
     const bucketSeconds = parseBucketSeconds(
       typeof value.bucket === 'string' ? value.bucket : undefined,
     );
-    const from = typeof value.from === 'string' ? value.from : undefined;
-    const to = typeof value.to === 'string' ? value.to : undefined;
+    const now = new Date();
+    const from =
+      typeof value.from === 'string' ? value.from : new Date(now.getTime() - 24 * 3_600_000).toISOString();
+    const to = typeof value.to === 'string' ? value.to : now.toISOString();
     const serverId = typeof value.server_id === 'string' ? value.server_id : undefined;
     const tool = typeof value.tool === 'string' ? value.tool : undefined;
     const buckets = this.#store.toolCallSeries({ from, to, bucketSeconds, serverId, tool });
 
-    const start = from !== undefined ? Math.floor(Date.parse(from) / 1000 / bucketSeconds) : buckets[0]?.bucket ?? 0;
-    const end = to !== undefined ? Math.floor(Date.parse(to) / 1000 / bucketSeconds) : buckets[buckets.length - 1]?.bucket ?? start;
+    const start = Math.floor(Date.parse(from) / 1000 / bucketSeconds);
+    const end = Math.floor(Date.parse(to) / 1000 / bucketSeconds);
     const byBucket = new Map(buckets.map((item) => [item.bucket, item]));
     const points: { bucket: string; total: number; success: number; error: number }[] = [];
     for (let bucket = start; bucket <= end; bucket += 1) {
