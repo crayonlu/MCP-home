@@ -35,6 +35,7 @@ const envSchema = z
       (value) => (value === '' ? undefined : value),
       z.url().optional(),
     ),
+    MCP_HOME_CALLS_RETENTION_DAYS: z.coerce.number().int().min(0).default(30),
   })
   .superRefine((value, context) => {
     if (value.MCP_HOME_BOOTSTRAP_CONTROL_KEY === value.MCP_HOME_MASTER_KEY) {
@@ -60,6 +61,7 @@ export interface RuntimeConfig {
   webDir?: string;
   marketDir: string;
   uvIndexUrl?: string;
+  callsRetentionDays: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
@@ -91,5 +93,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     ...(parsed.MCP_HOME_UV_INDEX_URL === undefined
       ? {}
       : { uvIndexUrl: parsed.MCP_HOME_UV_INDEX_URL.toString() }),
+    callsRetentionDays: parsed.MCP_HOME_CALLS_RETENTION_DAYS,
   };
 }

@@ -25,6 +25,7 @@ export function createTestRuntime(): TestRuntime {
     logLevel: 'error',
     oauthUrlClientId: true,
     marketDir: '/tmp/mcp-home-test-market',
+    callsRetentionDays: 30,
   });
   return {
     runtime,

@@ -8,9 +8,16 @@ import type {
   CredentialRecord,
   EventRecord,
   RuntimeState,
+  ServerProjection,
   ServerRecord,
+  ToolCallDraft,
+  ToolCallFilter,
+  ToolCallRecord,
+  ToolCallStats,
+  ToolProjection,
   UpdateCredentialInput,
   UpdateServerInput,
+  Visibility,
 } from '../domain/models.js';
 
 export interface CreateKeyInput {
@@ -23,6 +30,13 @@ export interface CreateKeyInput {
 export interface StoredApiKey extends ApiKeyRecord {
   digest: string;
 }
+
+/** Compact per-server projection view for the data-plane hot path. */
+export interface ProjectionIndexEntry {
+  defaultVisibility: Visibility;
+  overrides: Map<string, Visibility>;
+}
+export type ProjectionIndex = Map<string, ProjectionIndexEntry>;
 
 export interface Store {
   close(): void;
@@ -52,4 +66,18 @@ export interface Store {
   saveRuntimeState(state: RuntimeState): RuntimeState;
   appendEvent(event: Omit<EventRecord, 'id' | 'createdAt'>): EventRecord;
   listEvents(options?: { serverId?: string; limit?: number }): EventRecord[];
+
+  // ── Tool visibility projection ──────────────────────────────────────────
+  getServerProjection(serverId: string): ServerProjection | null;
+  setServerProjection(serverId: string, defaultVisibility: Visibility): ServerProjection;
+  listToolProjections(serverId?: string): ToolProjection[];
+  setToolProjection(serverId: string, toolName: string, visibility: ToolProjection['visibility']): void;
+  getProjectionIndex(): ProjectionIndex;
+
+  // ── Tool call observability ─────────────────────────────────────────────
+  insertToolCalls(calls: ToolCallDraft[]): number;
+  listToolCalls(filter: ToolCallFilter): ToolCallRecord[];
+  countToolCalls(filter: ToolCallFilter): number;
+  toolCallStats(filter: Omit<ToolCallFilter, 'limit' | 'offset'>): ToolCallStats;
+  deleteOldToolCalls(before: string): number;
 }

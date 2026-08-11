@@ -299,3 +299,95 @@ export interface EventRecord {
   detail: Record<string, unknown>;
   createdAt: string;
 }
+
+// ── Tool visibility projection ────────────────────────────────────────────
+
+export const visibilitySchema = z.enum(['visible', 'hidden']);
+export type Visibility = z.infer<typeof visibilitySchema>;
+
+export const overrideVisibilitySchema = z.enum(['inherit', 'visible', 'hidden']);
+export type OverrideVisibility = z.infer<typeof overrideVisibilitySchema>;
+
+export const serverProjectionSchema = z.object({
+  serverId: z.string().uuid(),
+  defaultVisibility: visibilitySchema.default('visible'),
+  updatedAt: z.string(),
+});
+export type ServerProjection = z.infer<typeof serverProjectionSchema>;
+
+export const toolProjectionSchema = z.object({
+  serverId: z.string().uuid(),
+  upstreamToolName: z.string(),
+  visibility: overrideVisibilitySchema,
+  updatedAt: z.string(),
+});
+export type ToolProjection = z.infer<typeof toolProjectionSchema>;
+
+export const setProjectionInputSchema = z.object({
+  defaultVisibility: visibilitySchema.optional(),
+  overrides: z
+    .array(
+      z.object({
+        tool: z.string().min(1),
+        visibility: overrideVisibilitySchema,
+      }),
+    )
+    .optional(),
+});
+export type SetProjectionInput = z.infer<typeof setProjectionInputSchema>;
+
+// ── Tool call observability ───────────────────────────────────────────────
+
+export const toolCallStatusSchema = z.enum([
+  'success',
+  'tool_error',
+  'protocol_error',
+  'timeout',
+  'cancelled',
+  'rejected',
+]);
+export type ToolCallStatus = z.infer<typeof toolCallStatusSchema>;
+
+export const toolCallSchema = z.object({
+  id: z.string().uuid(),
+  endpointType: z.enum(['aggregate', 'individual', 'management']),
+  principalKind: z.enum(['access_key', 'control_key', 'oauth_client']),
+  principalId: z.string(),
+  serverId: z.string().uuid().nullable(),
+  exposedToolName: z.string(),
+  upstreamToolName: z.string(),
+  status: toolCallStatusSchema,
+  errorType: z.string().nullable(),
+  startedAt: z.string(),
+  completedAt: z.string(),
+  durationMs: z.number().int().nonnegative(),
+});
+export type ToolCallRecord = z.infer<typeof toolCallSchema>;
+
+export type ToolCallDraft = Omit<ToolCallRecord, 'id'>;
+
+export const toolCallFilterSchema = z.object({
+  limit: z.number().int().min(1).max(500).default(50),
+  offset: z.number().int().min(0).default(0),
+  serverId: z.string().uuid().optional(),
+  tool: z.string().optional(),
+  endpointType: z.enum(['aggregate', 'individual', 'management']).optional(),
+  principalId: z.string().optional(),
+  status: toolCallStatusSchema.optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+});
+export type ToolCallFilter = z.infer<typeof toolCallFilterSchema>;
+
+export interface ToolCallStats {
+  total: number;
+  byStatus: Partial<Record<ToolCallStatus, number>>;
+  success: number;
+  error: number;
+  successRate: number;
+  avgDurationMs: number;
+  p50Ms: number;
+  p95Ms: number;
+  topTools: { tool: string; count: number }[];
+  topFailing: { tool: string; errorType: string | null; count: number }[];
+}

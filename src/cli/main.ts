@@ -283,6 +283,46 @@ program
     ),
   );
 
+const calls = program.command('calls').description('Inspect tool call records (metadata only)');
+calls
+  .command('list')
+  .description('List recent tool calls')
+  .option('--limit <count>', 'maximum records', '50')
+  .option('--server <id>', 'filter by server id')
+  .option('--tool <name>', 'filter by upstream tool name')
+  .option('--endpoint <type>', 'filter by endpoint (aggregate|individual)')
+  .option('--status <status>', 'filter by status')
+  .action(
+    run((client, command: Command) => {
+      const query = new URLSearchParams();
+      const options = command.opts();
+      query.set('limit', String(options.limit));
+      if (options.server) query.set('server_id', options.server);
+      if (options.tool) query.set('tool', options.tool);
+      if (options.endpoint) query.set('endpoint_type', options.endpoint);
+      if (options.status) query.set('status', options.status);
+      return client.request('GET', `/api/v1/calls?${query}`);
+    }),
+  );
+calls
+  .command('stats')
+  .description('Show aggregate tool call statistics')
+  .option('--server <id>', 'filter by server id')
+  .option('--tool <name>', 'filter by upstream tool name')
+  .option('--from <iso>', 'start time (ISO-8601)')
+  .option('--to <iso>', 'end time (ISO-8601)')
+  .action(
+    run((client, command: Command) => {
+      const query = new URLSearchParams();
+      const options = command.opts();
+      if (options.server) query.set('server_id', options.server);
+      if (options.tool) query.set('tool', options.tool);
+      if (options.from) query.set('from', options.from);
+      if (options.to) query.set('to', options.to);
+      return client.request('GET', `/api/v1/calls/stats?${query}`);
+    }),
+  );
+
 program
   .command('api <method> <path>')
   .description('Call any Control API operation')

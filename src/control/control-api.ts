@@ -179,6 +179,16 @@ export function mountControlApi(
     '/api/v1/servers/:id/endpoint',
     route((context) => options.service.serverEndpoint(context.req.param('id'))),
   );
+  app.get(
+    '/api/v1/servers/:id/projection',
+    route((context) => options.service.getProjection(context.req.param('id'))),
+  );
+  app.patch(
+    '/api/v1/servers/:id/projection',
+    route(async (context) =>
+      options.service.setProjection(context.req.param('id'), await context.req.json()),
+    ),
+  );
 
   app.get(
     '/api/v1/credentials',
@@ -235,6 +245,14 @@ export function mountControlApi(
     route((context) =>
       options.store.listEvents({ limit: numberQuery(context.req.query('limit'), 100) }),
     ),
+  );
+  app.get(
+    '/api/v1/calls',
+    route((context) => options.service.listCalls(queryObject(context))),
+  );
+  app.get(
+    '/api/v1/calls/stats',
+    route((context) => options.service.callStats(queryObject(context))),
   );
   app.get(
     '/api/v1/diagnostics',
@@ -374,6 +392,10 @@ function numberQuery(value: string | undefined, fallback: number): number {
 function booleanQuery(value: string | undefined, fallback: boolean): boolean {
   if (value === undefined) return fallback;
   return z.enum(['true', 'false']).parse(value) === 'true';
+}
+
+function queryObject(context: HonoContext): Record<string, string> {
+  return Object.fromEntries(new URL(context.req.raw.url).searchParams.entries());
 }
 
 async function readOptionalJson(request: Request): Promise<unknown> {

@@ -3,6 +3,7 @@ import { api } from '../api/client'
 import type {
   ApiKeyRecord,
   AuthorizeResult,
+  CallStats,
   CapabilitySnapshot,
   CredentialRecord,
   CredentialTestResult,
@@ -11,9 +12,13 @@ import type {
   EventLevel,
   MarketEntry,
   Overview,
+  OverrideVisibility,
   ServerLogEntry,
+  ServerProjection,
   ServerRecord,
   ServerWithRuntime,
+  ToolCallRecord,
+  Visibility,
 } from '../api/types'
 
 export function useOverview() {
@@ -277,5 +282,51 @@ export function useMarketUninstall() {
       client.invalidateQueries({ queryKey: ['servers'] })
       client.invalidateQueries({ queryKey: ['overview'] })
     },
+  })
+}
+
+export function useServerProjection(id: string) {
+  return useQuery({
+    queryKey: ['servers', id, 'projection'],
+    queryFn: () => api.get<ServerProjection>(`/api/v1/servers/${id}/projection`),
+    enabled: Boolean(id),
+  })
+}
+
+export function useSetProjection(id: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { defaultVisibility?: Visibility; overrides?: { tool: string; visibility: OverrideVisibility }[] }) =>
+      api.patch<ServerProjection>(`/api/v1/servers/${id}/projection`, input),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['servers', id, 'projection'] })
+    },
+  })
+}
+
+export function useCalls(filter: Record<string, string | undefined>) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(filter)) {
+    if (value !== undefined && value !== '') query.set(key, value)
+  }
+  const queryString = query.toString()
+  return useQuery({
+    queryKey: ['calls', queryString],
+    queryFn: () =>
+      api.get<{ items: ToolCallRecord[]; total: number }>(`/api/v1/calls?${queryString}`),
+    refetchInterval: 8000,
+  })
+}
+
+export function useCallStats(filter: Record<string, string | undefined>) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries(filter)) {
+    if (value !== undefined && value !== '') query.set(key, value)
+  }
+  const queryString = query.toString()
+  return useQuery({
+    queryKey: ['calls-stats', queryString],
+    queryFn: () => api.get<CallStats>(`/api/v1/calls/stats?${queryString}`),
+    refetchInterval: 8000,
   })
 }

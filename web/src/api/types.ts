@@ -188,7 +188,7 @@ export interface MarketEntry {
   name: string
   description: string
   category: string
-  kind: 'home-stdio' | 'remote'
+  kind: 'home-stdio' | 'remote' | 'uvx'
   package?: string
   bin?: string
   url?: string
@@ -196,4 +196,50 @@ export interface MarketEntry {
   requires: MarketRequirement[]
   argsTemplate?: string[]
   installed: boolean
+}
+
+export type Visibility = 'visible' | 'hidden'
+export type OverrideVisibility = 'inherit' | 'visible' | 'hidden'
+
+export interface ServerProjection {
+  serverId: string
+  defaultVisibility: Visibility
+  overrides: Record<string, OverrideVisibility>
+  tools: { name: string; description: string; visible: boolean }[]
+}
+
+export type ToolCallStatus =
+  | 'success'
+  | 'tool_error'
+  | 'protocol_error'
+  | 'timeout'
+  | 'cancelled'
+  | 'rejected'
+
+export interface ToolCallRecord {
+  id: string
+  endpointType: 'aggregate' | 'individual' | 'management'
+  principalKind: 'access_key' | 'control_key' | 'oauth_client'
+  principalId: string
+  serverId: string | null
+  exposedToolName: string
+  upstreamToolName: string
+  status: ToolCallStatus
+  errorType: string | null
+  startedAt: string
+  completedAt: string
+  durationMs: number
+}
+
+export interface CallStats {
+  total: number
+  byStatus: Partial<Record<ToolCallStatus, number>>
+  success: number
+  error: number
+  successRate: number
+  avgDurationMs: number
+  p50Ms: number
+  p95Ms: number
+  topTools: { tool: string; count: number }[]
+  topFailing: { tool: string; errorType: string | null; count: number }[]
 }

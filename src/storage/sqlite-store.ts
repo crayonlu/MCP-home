@@ -21,7 +21,10 @@ import {
   credentialPayloadSchema,
   credentialRecordSchema,
   runtimeStateSchema,
+  serverProjectionSchema,
   serverRecordSchema,
+  toolCallSchema,
+  toolProjectionSchema,
   updateServerInputSchema,
   type ApiKeyKind,
   type ApiKeyRecord,
@@ -32,12 +35,25 @@ import {
   type CredentialRecord,
   type EventRecord,
   type RuntimeState,
+  type ServerProjection,
   type ServerRecord,
+  type ToolCallDraft,
+  type ToolCallFilter,
+  type ToolCallRecord,
+  type ToolCallStats,
+  type ToolCallStatus,
+  type ToolProjection,
   type UpdateCredentialInput,
   type UpdateServerInput,
+  type Visibility,
 } from '../domain/models.js';
 import type { SecretBox } from '../security/secret-box.js';
-import type { CreateKeyInput, Store, StoredApiKey } from './store.js';
+import type {
+  CreateKeyInput,
+  ProjectionIndex,
+  Store,
+  StoredApiKey,
+} from './store.js';
 
 const serverRowSchema = z.object({
   id: z.string(),
@@ -114,6 +130,34 @@ const eventRowSchema = z.object({
   message: z.string(),
   detail_json: z.string(),
   created_at: z.string(),
+});
+
+const serverProjectionRowSchema = z.object({
+  server_id: z.string(),
+  default_visibility: z.string(),
+  updated_at: z.string(),
+});
+
+const toolProjectionRowSchema = z.object({
+  server_id: z.string(),
+  upstream_tool_name: z.string(),
+  visibility: z.string(),
+  updated_at: z.string(),
+});
+
+const toolCallRowSchema = z.object({
+  id: z.string(),
+  endpoint_type: z.string(),
+  principal_kind: z.string(),
+  principal_id: z.string(),
+  server_id: z.string().nullable(),
+  exposed_tool_name: z.string(),
+  upstream_tool_name: z.string(),
+  status: z.string(),
+  error_type: z.string().nullable(),
+  started_at: z.string(),
+  completed_at: z.string(),
+  duration_ms: z.number(),
 });
 
 function parseJson(value: string): unknown {
@@ -282,6 +326,50 @@ export class SqliteStore implements Store {
         DELETE FROM events
         WHERE id IN (
           SELECT id FROM events ORDER BY created_at DESC LIMIT -1 OFFSET 10000
+        );
+      END;
+
+      CREATE TABLE IF NOT EXISTS server_projections (
+        server_id TEXT PRIMARY KEY REFERENCES servers(id) ON DELETE CASCADE,
+        default_visibility TEXT NOT NULL CHECK (default_visibility IN ('visible', 'hidden')),
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS tool_projections (
+        server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        upstream_tool_name TEXT NOT NULL,
+        visibility TEXT NOT NULL CHECK (visibility IN ('inherit', 'visible', 'hidden')),
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (server_id, upstream_tool_name)
+      );
+
+      CREATE TABLE IF NOT EXISTS tool_calls (
+        id TEXT PRIMARY KEY,
+        endpoint_type TEXT NOT NULL CHECK (endpoint_type IN ('aggregate', 'individual', 'management')),
+        principal_kind TEXT NOT NULL,
+        principal_id TEXT NOT NULL,
+        server_id TEXT REFERENCES servers(id) ON DELETE SET NULL,
+        exposed_tool_name TEXT NOT NULL,
+        upstream_tool_name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error_type TEXT,
+        started_at TEXT NOT NULL,
+        completed_at TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_tool_calls_started ON tool_calls(started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_tool_calls_server ON tool_calls(server_id, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_tool_calls_principal ON tool_calls(principal_id, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_tool_calls_tool ON tool_calls(upstream_tool_name, started_at DESC);
+
+      CREATE TRIGGER IF NOT EXISTS trim_tool_calls
+      AFTER INSERT ON tool_calls
+      WHEN (SELECT COUNT(*) FROM tool_calls) > 200000
+      BEGIN
+        DELETE FROM tool_calls
+        WHERE id IN (
+          SELECT id FROM tool_calls ORDER BY started_at DESC LIMIT -1 OFFSET 200000
         );
       END;
     `);
@@ -709,6 +797,294 @@ export class SqliteStore implements Store {
           .all(options.serverId, limit)
       : this.#db.prepare('SELECT * FROM events ORDER BY created_at DESC LIMIT ?').all(limit);
     return rows.map((row) => this.#parseEvent(row));
+  }
+
+  // ── Tool visibility projection ──────────────────────────────────────────
+
+  getServerProjection(serverId: string): ServerProjection | null {
+    const row = this.#db
+      .prepare('SELECT * FROM server_projections WHERE server_id = ?')
+      .get(serverId);
+    return row === undefined ? null : this.#parseServerProjection(row);
+  }
+
+  setServerProjection(serverId: string, defaultVisibility: Visibility): ServerProjection {
+    const timestamp = now();
+    this.#db
+      .prepare(
+        `INSERT INTO server_projections (server_id, default_visibility, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(server_id) DO UPDATE SET
+           default_visibility = excluded.default_visibility,
+           updated_at = excluded.updated_at`,
+      )
+      .run(serverId, defaultVisibility, timestamp);
+    return serverProjectionSchema.parse({
+      serverId,
+      defaultVisibility,
+      updatedAt: timestamp,
+    });
+  }
+
+  listToolProjections(serverId?: string): ToolProjection[] {
+    const rows = serverId
+      ? this.#db
+          .prepare('SELECT * FROM tool_projections WHERE server_id = ? ORDER BY upstream_tool_name')
+          .all(serverId)
+      : this.#db.prepare('SELECT * FROM tool_projections ORDER BY server_id, upstream_tool_name').all();
+    return rows.map((row) => this.#parseToolProjection(row));
+  }
+
+  setToolProjection(serverId: string, toolName: string, visibility: ToolProjection['visibility']): void {
+    if (visibility === 'inherit') {
+      this.#db
+        .prepare('DELETE FROM tool_projections WHERE server_id = ? AND upstream_tool_name = ?')
+        .run(serverId, toolName);
+      return;
+    }
+    this.#db
+      .prepare(
+        `INSERT INTO tool_projections (server_id, upstream_tool_name, visibility, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(server_id, upstream_tool_name) DO UPDATE SET
+           visibility = excluded.visibility,
+           updated_at = excluded.updated_at`,
+      )
+      .run(serverId, toolName, visibility, now());
+  }
+
+  getProjectionIndex(): ProjectionIndex {
+    const index: ProjectionIndex = new Map();
+    for (const row of this.#db.prepare('SELECT * FROM server_projections').all()) {
+      const parsed = this.#parseServerProjection(row);
+      index.set(parsed.serverId, {
+        defaultVisibility: parsed.defaultVisibility,
+        overrides: new Map(),
+      });
+    }
+    for (const row of this.#db.prepare('SELECT * FROM tool_projections').all()) {
+      const parsed = this.#parseToolProjection(row);
+      if (parsed.visibility === 'inherit') continue;
+      const entry = index.get(parsed.serverId) ?? {
+        defaultVisibility: 'visible' as Visibility,
+        overrides: new Map(),
+      };
+      entry.overrides.set(parsed.upstreamToolName, parsed.visibility);
+      index.set(parsed.serverId, entry);
+    }
+    return index;
+  }
+
+  // ── Tool call observability ─────────────────────────────────────────────
+
+  insertToolCalls(calls: ToolCallDraft[]): number {
+    if (calls.length === 0) return 0;
+    const statement = this.#db.prepare(
+      `INSERT INTO tool_calls (
+         id, endpoint_type, principal_kind, principal_id, server_id,
+         exposed_tool_name, upstream_tool_name, status, error_type,
+         started_at, completed_at, duration_ms
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    for (const call of calls) {
+      const record = toolCallSchema.parse({ id: randomUUID(), ...call });
+      statement.run(
+        record.id,
+        record.endpointType,
+        record.principalKind,
+        record.principalId,
+        record.serverId,
+        record.exposedToolName,
+        record.upstreamToolName,
+        record.status,
+        record.errorType,
+        record.startedAt,
+        record.completedAt,
+        record.durationMs,
+      );
+    }
+    return calls.length;
+  }
+
+  listToolCalls(filter: ToolCallFilter): ToolCallRecord[] {
+    const { where, params } = this.#callWhere(filter);
+    const rows = this.#db
+      .prepare(
+        `SELECT * FROM tool_calls
+         ${where}
+         ORDER BY started_at DESC, id DESC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(...params, filter.limit, filter.offset);
+    return rows.map((row) => this.#parseToolCall(row));
+  }
+
+  countToolCalls(filter: ToolCallFilter): number {
+    const { where, params } = this.#callWhere(filter);
+    const row = this.#db
+      .prepare(`SELECT COUNT(*) AS n FROM tool_calls ${where}`)
+      .get(...params);
+    return (row as { n: number }).n;
+  }
+
+  toolCallStats(filter: Omit<ToolCallFilter, 'limit' | 'offset'>): ToolCallStats {
+    const { where, params } = this.#callWhere({ ...filter, limit: 50, offset: 0 });
+    const totalRow = this.#db.prepare(`SELECT COUNT(*) AS n FROM tool_calls ${where}`).get(...params) as {
+      n: number;
+    };
+    const total = totalRow.n;
+
+    const byStatus: Partial<Record<ToolCallStatus, number>> = {};
+    for (const row of this.#db
+      .prepare(`SELECT status, COUNT(*) AS n FROM tool_calls ${where} GROUP BY status`)
+      .all(...params)) {
+      const parsed = row as { status: ToolCallStatus; n: number };
+      byStatus[parsed.status] = parsed.n;
+    }
+
+    const durationRows = this.#db
+      .prepare(
+        `SELECT duration_ms FROM tool_calls
+         ${where}
+         ORDER BY started_at DESC LIMIT 10000`,
+      )
+      .all(...params) as { duration_ms: number }[];
+    const durations = durationRows.map((row) => row.duration_ms).sort((a, b) => a - b);
+    const avgDurationMs =
+      durations.length === 0
+        ? 0
+        : Math.round(durations.reduce((sum, value) => sum + value, 0) / durations.length);
+    const percentile = (p: number): number => {
+      if (durations.length === 0) return 0;
+      const index = Math.min(durations.length - 1, Math.ceil((p / 100) * durations.length) - 1);
+      return durations[index] ?? 0;
+    };
+
+    const topTools = (
+      this.#db
+        .prepare(
+          `SELECT upstream_tool_name AS tool, COUNT(*) AS n FROM tool_calls
+           ${where}
+           GROUP BY upstream_tool_name ORDER BY n DESC LIMIT 10`,
+        )
+        .all(...params) as { tool: string; n: number }[]
+    ).map((row) => ({ tool: row.tool, count: row.n }));
+
+    const failingWhere =
+      where === '' ? 'WHERE status != ?' : `${where} AND status != ?`;
+    const failingParams = [...params, 'success'];
+    const topFailing = (
+      this.#db
+        .prepare(
+          `SELECT upstream_tool_name AS tool, error_type AS errorType, COUNT(*) AS n FROM tool_calls
+           ${failingWhere}
+           GROUP BY upstream_tool_name, error_type ORDER BY n DESC LIMIT 10`,
+        )
+        .all(...failingParams) as { tool: string; errorType: string | null; n: number }[]
+    ).map((row) => ({ tool: row.tool, errorType: row.errorType, count: row.n }));
+
+    const success = byStatus.success ?? 0;
+    const error = total - success;
+    return {
+      total,
+      byStatus,
+      success,
+      error,
+      successRate: total === 0 ? 0 : Math.round((success / total) * 1000) / 10,
+      avgDurationMs,
+      p50Ms: percentile(50),
+      p95Ms: percentile(95),
+      topTools,
+      topFailing,
+    };
+  }
+
+  deleteOldToolCalls(before: string): number {
+    let total = 0;
+    for (;;) {
+      const rows = this.#db
+        .prepare('SELECT id FROM tool_calls WHERE started_at < ? ORDER BY started_at ASC LIMIT 500')
+        .all(before) as { id: string }[];
+      if (rows.length === 0) break;
+      const statement = this.#db.prepare('DELETE FROM tool_calls WHERE id = ?');
+      for (const row of rows) statement.run(row.id);
+      total += rows.length;
+    }
+    return total;
+  }
+
+  #callWhere(filter: ToolCallFilter): {
+    where: string;
+    params: (string | number)[];
+  } {
+    const conditions: string[] = [];
+    const params: (string | number)[] = [];
+    if (filter.serverId !== undefined) {
+      conditions.push('server_id = ?');
+      params.push(filter.serverId);
+    }
+    if (filter.tool !== undefined) {
+      conditions.push('upstream_tool_name = ?');
+      params.push(filter.tool);
+    }
+    if (filter.endpointType !== undefined) {
+      conditions.push('endpoint_type = ?');
+      params.push(filter.endpointType);
+    }
+    if (filter.principalId !== undefined) {
+      conditions.push('principal_id = ?');
+      params.push(filter.principalId);
+    }
+    if (filter.status !== undefined) {
+      conditions.push('status = ?');
+      params.push(filter.status);
+    }
+    if (filter.from !== undefined) {
+      conditions.push('started_at >= ?');
+      params.push(filter.from);
+    }
+    if (filter.to !== undefined) {
+      conditions.push('started_at <= ?');
+      params.push(filter.to);
+    }
+    return { where: conditions.length === 0 ? '' : `WHERE ${conditions.join(' AND ')}`, params };
+  }
+
+  #parseServerProjection(row: unknown): ServerProjection {
+    const parsed = serverProjectionRowSchema.parse(row);
+    return serverProjectionSchema.parse({
+      serverId: parsed.server_id,
+      defaultVisibility: parsed.default_visibility,
+      updatedAt: parsed.updated_at,
+    });
+  }
+
+  #parseToolProjection(row: unknown): ToolProjection {
+    const parsed = toolProjectionRowSchema.parse(row);
+    return toolProjectionSchema.parse({
+      serverId: parsed.server_id,
+      upstreamToolName: parsed.upstream_tool_name,
+      visibility: parsed.visibility,
+      updatedAt: parsed.updated_at,
+    });
+  }
+
+  #parseToolCall(row: unknown): ToolCallRecord {
+    const parsed = toolCallRowSchema.parse(row);
+    return toolCallSchema.parse({
+      id: parsed.id,
+      endpointType: parsed.endpoint_type,
+      principalKind: parsed.principal_kind,
+      principalId: parsed.principal_id,
+      serverId: parsed.server_id,
+      exposedToolName: parsed.exposed_tool_name,
+      upstreamToolName: parsed.upstream_tool_name,
+      status: parsed.status,
+      errorType: parsed.error_type,
+      startedAt: parsed.started_at,
+      completedAt: parsed.completed_at,
+      durationMs: parsed.duration_ms,
+    });
   }
 
   #parseServer(row: unknown): ServerRecord {

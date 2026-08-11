@@ -6,6 +6,8 @@ import {
   useServerAction,
   useServerCapabilities,
   useServerLogs,
+  useServerProjection,
+  useSetProjection,
   useUpdateServer,
 } from '../../app/queries'
 import { useI18n } from '../../i18n'
@@ -14,6 +16,8 @@ import { useConfirm } from '../../components/ui/ConfirmDialog'
 import { Badge, StatusDot } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { CopyButton } from '../../components/ui/CopyButton'
+import { Toggle } from '../../components/ui/Toggle'
+import { ActionsMenu } from '../../components/ui/Menu'
 import { TabsView, type TabItem } from '../../components/ui/Tabs'
 import { ServerFormSheet, type ServerFormValue } from './ServerForm'
 import { runtimeStatusLabel, runtimeStatusMeta } from '../../app/status'
@@ -27,6 +31,8 @@ export function ServerDetailPage() {
   const { data: server, isLoading } = useServer(id)
   const { data: capability } = useServerCapabilities(id)
   const { data: logs } = useServerLogs(id)
+  const { data: projection } = useServerProjection(id)
+  const setProjection = useSetProjection(id)
   const updateServer = useUpdateServer()
   const deleteServer = useDeleteServer()
   const serverAction = useServerAction()
@@ -151,25 +157,87 @@ export function ServerDetailPage() {
             )
           }
           if (value === 'capability') {
+            const tools =
+              projection?.tools ??
+              capability?.tools.map((tool) => ({
+                name: tool.name,
+                description: tool.description ?? '',
+                visible: true,
+              })) ??
+              []
             return (
               <div className="flex flex-col gap-4">
                 {!capability ? (
                   <div className="text-sm text-ink-3">{t('common.loading')}</div>
                 ) : (
                   <>
-                    <Section title={`${t('server.tools')} (${capability.tools.length})`}>
-                      {capability.tools.length === 0 ? (
+                    <Section title={t('server.visibility')}>
+                      <div className="flex items-center justify-between bg-surface px-4 py-3">
+                        <div className="flex flex-col">
+                          <span className="text-sm text-ink">{t('server.defaultVisibility')}</span>
+                          <span className="text-xs text-ink-3">{t('server.visibilityHint')}</span>
+                        </div>
+                        <Toggle
+                          checked={(projection?.defaultVisibility ?? 'visible') === 'visible'}
+                          disabled={setProjection.isPending}
+                          onChange={(visible) =>
+                            setProjection.mutate({
+                              defaultVisibility: visible ? 'visible' : 'hidden',
+                            })
+                          }
+                        />
+                      </div>
+                    </Section>
+                    <Section title={`${t('server.tools')} (${tools.length})`}>
+                      {tools.length === 0 ? (
                         <div className="text-xs text-ink-3">—</div>
                       ) : (
                         <div className="grid grid-cols-1 gap-px bg-ink-3/10 sm:grid-cols-2">
-                          {capability.tools.map((tool) => (
-                            <div key={tool.name} className="bg-surface px-3 py-2">
-                              <div className="font-mono text-[13px] text-ink">{tool.name}</div>
-                              {tool.description && (
-                                <div className="mt-0.5 line-clamp-2 text-xs text-ink-3">
-                                  {tool.description}
+                          {tools.map((tool) => (
+                            <div key={tool.name} className="flex items-start gap-3 bg-surface px-3 py-2">
+                                <div className="flex min-w-0 flex-1 flex-col">
+                                  <div className="font-mono text-[13px] text-ink">{tool.name}</div>
+                                  {tool.description && (
+                                    <div className="mt-0.5 line-clamp-2 text-xs text-ink-3">
+                                      {tool.description}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
+                                <Badge tone={tool.visible ? 'success' : 'neutral'}>
+                                  {tool.visible
+                                    ? t('server.toolVisible')
+                                    : t('server.toolHidden')}
+                                </Badge>
+                                <ActionsMenu
+                                  actions={[
+                                    {
+                                      label: t('server.visibilityInherit'),
+                                      disabled: setProjection.isPending,
+                                      onSelect: () =>
+                                        setProjection.mutate({
+                                          overrides: [
+                                            { tool: tool.name, visibility: 'inherit' },
+                                          ],
+                                        }),
+                                    },
+                                    {
+                                      label: t('server.toolVisible'),
+                                      disabled: setProjection.isPending,
+                                      onSelect: () =>
+                                        setProjection.mutate({
+                                          overrides: [{ tool: tool.name, visibility: 'visible' }],
+                                        }),
+                                    },
+                                    {
+                                      label: t('server.toolHidden'),
+                                      disabled: setProjection.isPending,
+                                      onSelect: () =>
+                                        setProjection.mutate({
+                                          overrides: [{ tool: tool.name, visibility: 'hidden' }],
+                                        }),
+                                    },
+                                  ]}
+                                />
                             </div>
                           ))}
                         </div>

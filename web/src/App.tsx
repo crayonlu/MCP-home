@@ -17,6 +17,7 @@ import { DiagnosticsPage } from './features/diagnostics/DiagnosticsPage'
 import { EventsPage } from './features/events/EventsPage'
 import { SettingsPage } from './features/settings/SettingsPage'
 import { MarketPage } from './features/market/MarketPage'
+import { CallsPage } from './features/calls/CallsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -67,6 +68,7 @@ export function App() {
                   <Route path="/endpoints" element={<EndpointsPage />} />
                   <Route path="/diagnostics" element={<DiagnosticsPage />} />
                   <Route path="/events" element={<EventsPage />} />
+                  <Route path="/calls" element={<CallsPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />

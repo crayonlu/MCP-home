@@ -178,6 +178,7 @@ mcp-home events              # recent events with level filter
 | `MCP_HOME_WEB_DIR` | Web console static files | disabled (set in Docker image) |
 | `MCP_HOME_OAUTH_URL_CLIENT_ID` | Global OAuth client registration | `true` (URL-based) |
 | `MCP_HOME_UV_INDEX_URL` | PyPI mirror for uvx Market installs | unset (pypi.org) |
+| `MCP_HOME_CALLS_RETENTION_DAYS` | Tool call record retention in days (metadata only) | `30` |
 
 ## Deep Dives
 

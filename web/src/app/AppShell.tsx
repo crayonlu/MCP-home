@@ -7,6 +7,7 @@ import {
   Link2,
   LogOut,
   Moon,
+  PhoneCall,
   ScrollText,
   Server,
   Settings,
@@ -31,6 +32,7 @@ interface NavItem {
 const desktopNav: NavItem[] = [
   { to: '/', key: 'nav.overview', icon: LayoutDashboard, end: true },
   { to: '/servers', key: 'nav.servers', icon: Server },
+  { to: '/calls', key: 'nav.calls', icon: PhoneCall },
   { to: '/credentials', key: 'nav.credentials', icon: KeyRound },
   { to: '/access-keys', key: 'nav.accessKeys', icon: Link2 },
   { to: '/endpoints', key: 'nav.endpoints', icon: Globe },
@@ -135,6 +137,7 @@ function pageKeyFor(path: string): string {
   if (path.startsWith('/endpoints')) return 'nav.endpoints'
   if (path.startsWith('/diagnostics')) return 'nav.diagnostics'
   if (path.startsWith('/events')) return 'nav.events'
+  if (path.startsWith('/calls')) return 'nav.calls'
   if (path.startsWith('/settings')) return 'nav.settings'
   return 'nav.overview'
 }

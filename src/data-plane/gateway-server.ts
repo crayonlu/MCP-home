@@ -16,6 +16,8 @@ import {
   CLIENT_CAPABILITIES_META_KEY,
   ProtocolError,
   ProtocolErrorCode,
+  SdkError,
+  SdkErrorCode,
   Server,
   createRequestStateCodec,
   isInputRequiredResult,
@@ -32,11 +34,14 @@ import {
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { AppError } from '../domain/errors.js';
+import type { ToolCallDraft, ToolCallStatus } from '../domain/models.js';
+import type { CallRecorder } from '../observability/call-recorder.js';
 import type { CursorCodec } from '../security/cursor-codec.js';
 import type { UpstreamManager } from '../upstream/manager.js';
 import { fingerprint } from '../upstream/stable-json.js';
 import { CapabilityRegistry, type RegistryEntry } from './registry.js';
 import { canonicalTaskMethod } from './task-extension.js';
+import { ToolProjectionService } from './projection.js';
 import {
   aggregateName,
   aggregateExtensionMethod,
@@ -103,16 +108,22 @@ export class GatewayServerFactory {
   readonly #registry: CapabilityRegistry;
   readonly #upstreams: UpstreamManager;
   readonly #cursors: CursorCodec;
+  readonly #projections: ToolProjectionService;
+  readonly #recorder: CallRecorder;
 
   constructor(
     registry: CapabilityRegistry,
     upstreams: UpstreamManager,
     cursors: CursorCodec,
     masterKey: string,
+    projections: ToolProjectionService,
+    recorder: CallRecorder,
   ) {
     this.#registry = registry;
     this.#upstreams = upstreams;
     this.#cursors = cursors;
+    this.#projections = projections;
+    this.#recorder = recorder;
     this.#stateCodec = createRequestStateCodec<GatewayRequestState>({
       key: createHash('sha256').update(masterKey).digest(),
       ttlSeconds: 86_400,
@@ -152,25 +163,48 @@ export class GatewayServerFactory {
         'tools/call',
         { params: CallToolRequestParamsSchema, result: gatewayCallResultSchema },
         async (request, context) => {
-          const route = await this.#liveToolRoute(server, request.name, context);
-          const params = this.#prepareParams(
-            this.#restoreParams({ ...request, name: route.originalName }, route.entry.server.slug),
-            context,
-            route.entry.server.id,
-            route.entry.server.slug,
-          );
-          const raw = await this.#execute(
-            server,
-            route.entry,
-            { method: 'tools/call', params },
-            context,
-          );
-          return this.#parseToolResult(
-            raw,
-            context,
-            route.entry.server.id,
-            route.entry.server.slug,
-          );
+          const startedAt = new Date();
+          let route: { entry: RegistryEntry; originalName: string } | null = null;
+          try {
+            route = await this.#liveToolRoute(server, request.name, context);
+            const params = this.#prepareParams(
+              this.#restoreParams({ ...request, name: route.originalName }, route.entry.server.slug),
+              context,
+              route.entry.server.id,
+              route.entry.server.slug,
+            );
+            const raw = await this.#execute(
+              server,
+              route.entry,
+              { method: 'tools/call', params },
+              context,
+            );
+            this.#recordCall(context, {
+              endpointType: 'aggregate',
+              serverId: route.entry.server.id,
+              exposedToolName: request.name,
+              upstreamToolName: route.originalName,
+              status: 'success',
+              startedAt,
+              raw,
+            });
+            return this.#parseToolResult(
+              raw,
+              context,
+              route.entry.server.id,
+              route.entry.server.slug,
+            );
+          } catch (error) {
+            this.#recordCallError(context, {
+              endpointType: 'aggregate',
+              serverId: route?.entry.server.id ?? null,
+              exposedToolName: request.name,
+              upstreamToolName: route?.originalName ?? request.name,
+              startedAt,
+              error,
+            });
+            throw error;
+          }
         },
       );
     }
@@ -453,16 +487,38 @@ export class GatewayServerFactory {
         'tools/call',
         { params: CallToolRequestParamsSchema, result: gatewayCallResultSchema },
         async (request, context) => {
-          const raw = await this.#execute(
-            server,
-            entry,
-            {
-              method: 'tools/call',
-              params: this.#prepareParams(request, context, entry.server.id),
-            },
-            context,
-          );
-          return this.#parseToolResult(raw, context, entry.server.id, null);
+          const startedAt = new Date();
+          try {
+            const raw = await this.#execute(
+              server,
+              entry,
+              {
+                method: 'tools/call',
+                params: this.#prepareParams(request, context, entry.server.id),
+              },
+              context,
+            );
+            this.#recordCall(context, {
+              endpointType: 'individual',
+              serverId: entry.server.id,
+              exposedToolName: request.name,
+              upstreamToolName: request.name,
+              status: 'success',
+              startedAt,
+              raw,
+            });
+            return this.#parseToolResult(raw, context, entry.server.id, null);
+          } catch (error) {
+            this.#recordCallError(context, {
+              endpointType: 'individual',
+              serverId: entry.server.id,
+              exposedToolName: request.name,
+              upstreamToolName: request.name,
+              startedAt,
+              error,
+            });
+            throw error;
+          }
         },
       );
     }
@@ -813,12 +869,16 @@ export class GatewayServerFactory {
     const groups = await Promise.all(
       entries
         .filter(({ snapshot }) => snapshot.capabilities.tools)
-        .map(async (entry) =>
-          (await this.#listTools(server, entry, context, params)).map((tool) => ({
+        .map(async (entry) => {
+          const tools = await this.#listTools(server, entry, context, params);
+          // Tool visibility is an aggregate-endpoint projection: hidden tools
+          // are excluded here (and enforced again in #liveToolRoute).
+          const visible = this.#projections.apply(entry.server.id, tools);
+          return visible.map((tool) => ({
             ...rewriteAggregateTool(tool, entry.server.slug),
             name: aggregateName(entry.server.slug, tool.name),
-          })),
-        ),
+          }));
+        }),
     );
     return groups.flat().sort((left, right) => left.name.localeCompare(right.name));
   }
@@ -995,7 +1055,10 @@ export class GatewayServerFactory {
         (candidate) =>
           candidate.name === name || aggregateName(entry.server.slug, candidate.name) === name,
       );
-      if (tool) return { entry, originalName: tool.name };
+      if (tool && this.#projections.isVisible(entry.server.id, tool.name)) {
+        return { entry, originalName: tool.name };
+      }
+      throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${name}`);
     }
 
     const parsed = splitAggregateName(name);
@@ -1004,8 +1067,10 @@ export class GatewayServerFactory {
       const tool = (await this.#listTools(server, entry, context, {})).find(
         (candidate) => aggregateName(entry.server.slug, candidate.name) === name,
       );
-      if (!tool) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${name}`);
-      return { entry, originalName: tool.name };
+      if (tool && this.#projections.isVisible(entry.server.id, tool.name)) {
+        return { entry, originalName: tool.name };
+      }
+      throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${name}`);
     }
 
     const candidates = (
@@ -1013,7 +1078,8 @@ export class GatewayServerFactory {
         this.#registry.entries().map(async (entry) => ({
           entry,
           tool: (await this.#listTools(server, entry, context, {})).find(
-            (candidate) => candidate.name === name,
+            (candidate) =>
+              candidate.name === name && this.#projections.isVisible(entry.server.id, candidate.name),
           ),
         })),
       )
@@ -1027,6 +1093,82 @@ export class GatewayServerFactory {
         ? `Tool name is ambiguous in the aggregate endpoint: ${name}`
         : `Unknown aggregate tool: ${name}`,
     );
+  }
+
+  #recordCall(
+    context: ServerContext,
+    input: {
+      endpointType: ToolCallDraft['endpointType'];
+      serverId: string;
+      exposedToolName: string;
+      upstreamToolName: string;
+      status: ToolCallStatus;
+      startedAt: Date;
+      raw: unknown;
+    },
+  ): void {
+    const completedAt = new Date();
+    const toolError = isRecord(input.raw) && input.raw.isError === true;
+    this.#recorder.record({
+      endpointType: input.endpointType,
+      principalKind: this.#principalKind(context),
+      principalId: context.http?.authInfo?.clientId ?? 'anonymous',
+      serverId: input.serverId,
+      exposedToolName: input.exposedToolName,
+      upstreamToolName: input.upstreamToolName,
+      status: toolError ? 'tool_error' : input.status,
+      errorType: toolError ? 'tool_error' : null,
+      startedAt: input.startedAt.toISOString(),
+      completedAt: completedAt.toISOString(),
+      durationMs: Math.max(0, completedAt.getTime() - input.startedAt.getTime()),
+    });
+  }
+
+  #recordCallError(
+    context: ServerContext,
+    input: {
+      endpointType: ToolCallDraft['endpointType'];
+      serverId: string | null;
+      exposedToolName: string;
+      upstreamToolName: string;
+      startedAt: Date;
+      error: unknown;
+    },
+  ): void {
+    const completedAt = new Date();
+    this.#recorder.record({
+      endpointType: input.endpointType,
+      principalKind: this.#principalKind(context),
+      principalId: context.http?.authInfo?.clientId ?? 'anonymous',
+      serverId: input.serverId,
+      exposedToolName: input.exposedToolName,
+      upstreamToolName: input.upstreamToolName,
+      status: this.#errorStatus(input.error),
+      errorType: this.#errorCode(input.error),
+      startedAt: input.startedAt.toISOString(),
+      completedAt: completedAt.toISOString(),
+      durationMs: Math.max(0, completedAt.getTime() - input.startedAt.getTime()),
+    });
+  }
+
+  #principalKind(context: ServerContext): ToolCallDraft['principalKind'] {
+    const kind = (context.http?.authInfo?.extra as { credentialKind?: string } | undefined)
+      ?.credentialKind;
+    if (kind === 'control') return 'control_key';
+    if (kind === 'access') return 'access_key';
+    return 'oauth_client';
+  }
+
+  #errorStatus(error: unknown): ToolCallStatus {
+    if (error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout) return 'timeout';
+    return 'protocol_error';
+  }
+
+  #errorCode(error: unknown): string | null {
+    if (error instanceof ProtocolError) return String(error.code);
+    if (error instanceof SdkError) return error.code;
+    if (error instanceof AppError) return error.code;
+    return null;
   }
 
   #appResourceRoute(metadata: Record<string, unknown> | undefined): { slug: string } | null {

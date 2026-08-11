@@ -107,6 +107,15 @@ export function controlOpenApi(publicUrl: URL): Record<string, unknown> {
     summary: 'Read server event logs',
     parameters: [idParameter('server_id'), limitParameter],
   });
+  add('/api/v1/servers/{server_id}/projection', 'get', 'getServerProjection', {
+    summary: 'Read tool visibility projection for a server',
+    parameters: [idParameter('server_id')],
+  });
+  add('/api/v1/servers/{server_id}/projection', 'patch', 'updateServerProjection', {
+    summary: 'Update tool visibility projection for a server',
+    parameters: [idParameter('server_id')],
+    body: true,
+  });
 
   add('/api/v1/credentials', 'get', 'listCredentials', {
     summary: 'List redacted upstream credentials',
@@ -164,6 +173,40 @@ export function controlOpenApi(publicUrl: URL): Record<string, unknown> {
   add('/api/v1/events', 'get', 'listEvents', {
     summary: 'Read system events',
     parameters: [limitParameter],
+  });
+  add('/api/v1/calls', 'get', 'listCalls', {
+    summary: 'List tool call records (metadata only)',
+    parameters: [
+      limitParameter,
+      { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
+      { name: 'server_id', in: 'query', schema: { type: 'string' } },
+      { name: 'tool', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'endpoint_type',
+        in: 'query',
+        schema: { type: 'string', enum: ['aggregate', 'individual', 'management'] },
+      },
+      { name: 'principal_id', in: 'query', schema: { type: 'string' } },
+      {
+        name: 'status',
+        in: 'query',
+        schema: {
+          type: 'string',
+          enum: ['success', 'tool_error', 'protocol_error', 'timeout', 'cancelled', 'rejected'],
+        },
+      },
+      { name: 'from', in: 'query', schema: { type: 'string', format: 'date-time' } },
+      { name: 'to', in: 'query', schema: { type: 'string', format: 'date-time' } },
+    ],
+  });
+  add('/api/v1/calls/stats', 'get', 'getCallStats', {
+    summary: 'Aggregate tool call statistics',
+    parameters: [
+      { name: 'server_id', in: 'query', schema: { type: 'string' } },
+      { name: 'tool', in: 'query', schema: { type: 'string' } },
+      { name: 'from', in: 'query', schema: { type: 'string', format: 'date-time' } },
+      { name: 'to', in: 'query', schema: { type: 'string', format: 'date-time' } },
+    ],
   });
   add('/api/v1/diagnostics', 'get', 'getDiagnostics', {
     summary: 'Read system diagnostics',

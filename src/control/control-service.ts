@@ -4,6 +4,8 @@ import {
   createCredentialInputSchema,
   createServerInputObjectSchema,
   createServerInputSchema,
+  setProjectionInputSchema,
+  toolCallFilterSchema,
   updateCredentialInputSchema,
   updateServerInputSchema,
   type ApiKeyKind,
@@ -497,6 +499,98 @@ export class ControlService {
     const server = this.#store.getServer(serverId);
     if (!server?.enabled) return;
     void this.#upstreams.refresh(serverId).catch(() => undefined);
+  }
+
+  // ── Tool visibility projection ──────────────────────────────────────────
+
+  getProjection(serverId: string) {
+    const server = this.#requireServer(serverId);
+    const projection = this.#store.getServerProjection(server.id);
+    const overrides = Object.fromEntries(
+      this.#store
+        .listToolProjections(server.id)
+        .filter((entry) => entry.visibility !== 'inherit')
+        .map((entry) => [entry.upstreamToolName, entry.visibility]),
+    );
+    const snapshot = this.#store.getSnapshot(server.id);
+    const tools = (snapshot?.tools ?? []).map((tool) => ({
+      name: tool.name,
+      description: tool.description ?? '',
+      visible: this.#isToolVisible(tool.name, projection?.defaultVisibility, overrides),
+    }));
+    return {
+      serverId: server.id,
+      defaultVisibility: projection?.defaultVisibility ?? 'visible',
+      overrides,
+      tools,
+    };
+  }
+
+  setProjection(serverId: string, value: unknown) {
+    const server = this.#requireServer(serverId);
+    const input = setProjectionInputSchema.parse(value);
+    if (input.defaultVisibility !== undefined) {
+      this.#store.setServerProjection(server.id, input.defaultVisibility);
+    }
+    for (const override of input.overrides ?? []) {
+      this.#store.setToolProjection(server.id, override.tool, override.visibility);
+    }
+    this.#onRegistryChanged();
+    return this.getProjection(server.id);
+  }
+
+  #isToolVisible(
+    toolName: string,
+    defaultVisibility: 'visible' | 'hidden' | undefined,
+    overrides: Record<string, string>,
+  ): boolean {
+    const override = overrides[toolName];
+    if (override === 'visible' || override === 'hidden') return override === 'visible';
+    return (defaultVisibility ?? 'visible') === 'visible';
+  }
+
+  // ── Tool call observability ─────────────────────────────────────────────
+
+  listCalls(value: Record<string, unknown>) {
+    const input = {
+      limit: value.limit === undefined ? 50 : Number(value.limit),
+      offset: value.offset === undefined ? 0 : Number(value.offset),
+      serverId: value.server_id,
+      tool: value.tool,
+      endpointType: value.endpoint_type,
+      principalId: value.principal_id,
+      status: value.status,
+      from: value.from,
+      to: value.to,
+    };
+    const filter = toolCallFilterSchema.parse(input);
+    return {
+      items: this.#store.listToolCalls(filter),
+      total: this.#store.countToolCalls(filter),
+    };
+  }
+
+  callStats(value: Record<string, unknown>) {
+    const input = {
+      serverId: value.server_id,
+      tool: value.tool,
+      from: value.from,
+      to: value.to,
+    };
+    const filter = toolCallFilterSchema.partial().parse({
+      limit: 50,
+      offset: 0,
+      ...input,
+    });
+    return this.#store.toolCallStats(filter);
+  }
+
+  #requireServer(serverId: string) {
+    const server = this.#store.getServer(serverId);
+    if (!server) {
+      throw new AppError('server_not_found', 'Server not found', 404);
+    }
+    return server;
   }
 }
 

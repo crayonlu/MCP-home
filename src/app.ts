@@ -5,7 +5,9 @@ import { ControlService } from './control/control-service.js';
 import { DataPlane } from './data-plane/data-plane.js';
 import { GatewayServerFactory } from './data-plane/gateway-server.js';
 import { CapabilityRegistry } from './data-plane/registry.js';
+import { ToolProjectionService } from './data-plane/projection.js';
 import { createLogger, type Logger } from './observability/logger.js';
+import { CallRecorder } from './observability/call-recorder.js';
 import { MarketService } from './market/market-service.js';
 import { ApiKeyHasher } from './security/api-keys.js';
 import { AuthService } from './security/auth-service.js';
@@ -51,7 +53,16 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
   );
   const registry = new CapabilityRegistry(store);
   const cursors = new CursorCodec(config.masterKey);
-  const gatewayFactory = new GatewayServerFactory(registry, upstreams, cursors, config.masterKey);
+  const projections = new ToolProjectionService(store);
+  const callRecorder = new CallRecorder(store, logger, config.callsRetentionDays);
+  const gatewayFactory = new GatewayServerFactory(
+    registry,
+    upstreams,
+    cursors,
+    config.masterKey,
+    projections,
+    callRecorder,
+  );
   const dataPlane = new DataPlane(gatewayFactory, registry, upstreams, auth, oauth, store, logger);
   const app = dataPlane.createApp({
     host: config.host,
@@ -140,6 +151,7 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
     async close() {
       await dataPlane.close();
       await upstreams.close();
+      await callRecorder.close();
       store.close();
     },
   };

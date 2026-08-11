@@ -146,9 +146,13 @@ export function structuredResult(value: unknown): Record<string, unknown> {
   return parsed.structuredContent;
 }
 
-export async function waitFor(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
+export async function waitFor(
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs = 5_000,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
+  for (;;) {
+    if (await predicate()) return;
     if (Date.now() >= deadline) throw new Error('Timed out waiting for fixture event');
     await new Promise<void>((resolve) => setTimeout(resolve, 10));
   }
