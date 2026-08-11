@@ -1,5 +1,7 @@
 # MCP Home
 
+> **🌐 Language: English · [中文](README.zh.md)**
+
 MCP Home is a single-user, self-hosted Remote MCP control plane and protocol gateway. Manage your upstream MCP servers and credentials in one place, then point any harness at stable, standard MCP URLs.
 
 It exposes two data-plane entry points:
@@ -21,21 +23,23 @@ This gives the agent knowledge of all CLI commands, OAuth flows, Market installa
 
 ## Web Console
 
-The web console mirrors the full CLI surface: server and credential management, OAuth authorization, one-click Market installs, diagnostics, events, config export/import — with Chinese/English UI and mobile support.
+The web console mirrors the full CLI surface: server and credential management, OAuth authorization, one-click Market installs, tool call observability, diagnostics, events, config export/import — with Chinese/English UI and mobile support.
 
-![Dashboard](docs/screenshots/dashboard.png)
+![Dashboard](docs/screenshots/en/dashboard.png)
 
-![Servers](docs/screenshots/servers.png)
+![Servers](docs/screenshots/en/servers.png)
 
-![Credentials](docs/screenshots/credentials.png)
+![Calls](docs/screenshots/en/calls.png)
 
-![Market](docs/screenshots/market.png)
+![Credentials](docs/screenshots/en/credentials.png)
 
-![Settings](docs/screenshots/settings.png)
+![Market](docs/screenshots/en/market.png)
+
+![Settings](docs/screenshots/en/settings.png)
 
 Mobile:
 
-![Market mobile](docs/screenshots/market-mobile.png) ![Dashboard mobile](docs/screenshots/dashboard-mobile.png)
+![Market mobile](docs/screenshots/en/market-mobile.png) ![Dashboard mobile](docs/screenshots/en/dashboard-mobile.png)
 
 ## Project Scope
 

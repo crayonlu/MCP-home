@@ -1,5 +1,7 @@
 # MCP Home
 
+> **🌐 中文 · [English](README.md)**
+
 MCP Home 是一个单用户、可自托管的 Remote MCP 控制面与协议网关。你在一个地方管理上游 MCP Server 和凭据，再把稳定的标准 MCP URL 配置给任意 Harness。
 
 它同时暴露两种数据面入口：
@@ -21,21 +23,23 @@ npx skills add crayonlu/mcp-home -g -y
 
 ## Web 控制台
 
-控制台提供与 CLI 完全对齐的功能：服务器与凭据管理、OAuth 授权、Market 一键安装、诊断、事件、配置导入导出，以及中英双语和移动端适配。
+控制台提供与 CLI 完全对齐的功能：服务器与凭据管理、OAuth 授权、Market 一键安装、调用观测、诊断、事件、配置导入导出，以及中英双语和移动端适配。
 
-![Dashboard](docs/screenshots/dashboard.png)
+![Dashboard](docs/screenshots/zh/dashboard.png)
 
-![Servers](docs/screenshots/servers.png)
+![Servers](docs/screenshots/zh/servers.png)
 
-![Credentials](docs/screenshots/credentials.png)
+![Calls](docs/screenshots/zh/calls.png)
 
-![Market](docs/screenshots/market.png)
+![Credentials](docs/screenshots/zh/credentials.png)
 
-![Settings](docs/screenshots/settings.png)
+![Market](docs/screenshots/zh/market.png)
+
+![Settings](docs/screenshots/zh/settings.png)
 
 移动端：
 
-![Market mobile](docs/screenshots/market-mobile.png) ![Dashboard mobile](docs/screenshots/dashboard-mobile.png)
+![Market mobile](docs/screenshots/zh/market-mobile.png) ![Dashboard mobile](docs/screenshots/zh/dashboard-mobile.png)
 
 ## 项目边界
 
