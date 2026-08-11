@@ -22,7 +22,14 @@ export function SelectField({
   return (
     <div className={`flex flex-col gap-1.5 ${className}`}>
       {label && <span className="text-[13px] font-medium text-ink-2">{label}</span>}
-      <Select.Root value={value} onValueChange={(next) => onChange(next ?? value)}>
+      <Select.Root
+        value={value}
+        onValueChange={(next) => onChange(next ?? value)}
+        itemToStringLabel={(item) => {
+          const option = options.find((candidate) => candidate.value === item)
+          return option?.label ?? String(item)
+        }}
+      >
         <Select.Trigger className="flex h-9 w-full select-none items-center justify-between bg-surface-2 px-3 text-sm text-ink data-[popup-open]:ring-2 data-[popup-open]:ring-accent/50">
           <Select.Value placeholder=" " />
           <Select.Icon>
