@@ -124,10 +124,13 @@ mcp-home market install resend --set RESEND_API_KEY=re_xxx   # home-stdio (npm)
 mcp-home market install context7 --set CONTEXT7_API_KEY=xxx  # remote (bearer)
 mcp-home market install deepwiki                        # remote (no auth)
 mcp-home market install fetch                           # uvx (Python, no config)
+mcp-home market install markitdown                       # docker (sibling container)
 mcp-home market uninstall resend                        # remove
 ```
 
 Market installs are async with progress: the CLI shows `npm install` steps, the web console shows a live log. Every curated entry is pinned to an exact artifact version (`package@x.y.z` / `package==x.y.z`); installs never drift with `latest`, and each install writes a persistent record (source, version, recipe revision). If an install needs a secret, the CLI/console prints a one-time action URL instead of accepting the secret on the command line.
+
+**Docker entries** (e.g. `markitdown`) run the image as a sibling container via `docker run --rm -i <image>`: the install pulls the image, or builds it from the entry's inline Dockerfile when not pullable. The gateway container must mount the host docker socket and its runtime user must be in the host docker group (compose `group_add`, default GID 999, override with `DOCKER_GROUP_ID`). Only needed when a package cannot run inside the Alpine gateway image (e.g. `markitdown` — its `onnxruntime` dependency ships no musl wheels).
 
 ### Give an AI Agent Safe Management Access
 

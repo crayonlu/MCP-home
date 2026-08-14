@@ -201,6 +201,63 @@ describe('market', () => {
     }
   });
 
+  it('installs a docker entry via docker run and reports the image transport', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'mcp-home-docker-'));
+    const dockerPath = join(fakeBin, 'docker');
+    writeFileSync(
+      dockerPath,
+      '#!/bin/sh\ncase "$1 $2" in\n  "image inspect") echo "No such image" >&2; exit 1 ;;\n  "pull markitdown-mcp:latest") echo "Pulled" >&2; exit 0 ;;\nesac\necho "docker called: $*" >&2\nexit 0\n',
+    );
+    chmodSync(dockerPath, 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${fakeBin}:${previousPath}`;
+    const { runtime, controlKey, close } = createTestRuntime();
+    try {
+      const result = (await installEntry(runtime, controlKey, 'markitdown')) as {
+        server: unknown;
+      };
+      const server = serverRecordSchema.parse(result.server);
+      expect(server.slug).toBe('markitdown');
+      expect(server.transport.type).toBe('stdio');
+      if (server.transport.type === 'stdio') {
+        expect(server.transport.command).toBe('docker');
+        expect(server.transport.args).toEqual(['run', '--rm', '-i', 'markitdown-mcp:latest']);
+      }
+    } finally {
+      await close();
+      process.env.PATH = previousPath;
+    }
+  });
+
+  it('builds a docker entry image from the inline Dockerfile when not pullable', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'mcp-home-docker-build-'));
+    const dockerPath = join(fakeBin, 'docker');
+    writeFileSync(
+      dockerPath,
+      '#!/bin/sh\ncase "$1" in\n  image) echo "No such image" >&2; exit 1 ;;\n  pull) echo "manifest unknown" >&2; exit 1 ;;\n  build) echo "Built image" >&2; exit 0 ;;\nesac\necho "docker called: $*" >&2\nexit 0\n',
+    );
+    chmodSync(dockerPath, 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${fakeBin}:${previousPath}`;
+    const { runtime, controlKey, close } = createTestRuntime();
+    try {
+      const result = (await installEntry(runtime, controlKey, 'markitdown')) as {
+        server: unknown;
+      };
+      const server = serverRecordSchema.parse(result.server);
+      expect(server.slug).toBe('markitdown');
+      const dockerfile = readFileSync(
+        join('/tmp/mcp-home-test-market/dockerfiles/markitdown/Dockerfile'),
+        'utf8',
+      );
+      expect(dockerfile).toContain('FROM python:3.13-slim');
+      expect(dockerfile).toContain('markitdown-mcp==0.0.1a4');
+    } finally {
+      await close();
+      process.env.PATH = previousPath;
+    }
+  });
+
   it('marks install jobs interrupted across a process restart instead of losing them', async () => {
     const fakeBin = mkdtempSync(join(tmpdir(), 'mcp-home-uv-slow-'));
     const uvPath = join(fakeBin, 'uv');

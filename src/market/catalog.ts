@@ -17,11 +17,15 @@ export interface MarketEntry {
   name: string
   description: string
   category: string
-  kind: 'home-stdio' | 'remote' | 'uvx'
+  kind: 'home-stdio' | 'remote' | 'uvx' | 'docker'
   package?: string
   bin?: string
   /** Pinned exact artifact version (npm `@x.y.z`, uvx `==x.y.z`); installs never drift with latest */
   version?: string
+  /** Docker image to run via `docker run --rm -i` (kind: docker); the host socket must be mounted */
+  image?: string
+  /** Inline Dockerfile used to build the image when it is not present and not pullable */
+  dockerfile?: string
   url?: string
   /** Extra dependencies pinned into the uv tool env (e.g. ["mcp<2"]) to work around upstream breaks */
   uvWith?: string[]
@@ -364,5 +368,28 @@ export const marketCatalog: MarketEntry[] = [
     credential: { type: 'env' },
     requires: [],
     docs: 'https://github.com/modelcontextprotocol/servers/tree/main/src/fetch',
+  },
+  {
+    id: 'markitdown',
+    name: 'MarkItDown',
+    description: 'Convert files and URLs (PDF, Office, images, audio) to Markdown',
+    category: 'data',
+    kind: 'docker',
+    image: 'markitdown-mcp:latest',
+    // onnxruntime (a hard dep) publishes no musl wheels, so the uvx runtime in
+    // the Alpine gateway image cannot install it — run the official glibc image
+    // as a sibling container via the mounted docker socket instead.
+    dockerfile: `FROM python:3.13-slim
+ENV DEBIAN_FRONTEND=noninteractive
+ENV EXIFTOOL_PATH=/usr/bin/exiftool
+ENV FFMPEG_PATH=/usr/bin/ffmpeg
+ENV MARKITDOWN_ENABLE_PLUGINS=True
+RUN sed -i -e 's#http://deb.debian.org/debian#http://mirrors.tuna.tsinghua.edu.cn/debian#g' -e 's#http://security.debian.org/debian-security#http://mirrors.tuna.tsinghua.edu.cn/debian-security#g' /etc/apt/sources.list.d/debian.sources && apt-get update && apt-get install -y --no-install-recommends ffmpeg exiftool && rm -rf /var/lib/apt/lists/*
+RUN pip --no-cache-dir install -i https://pypi.tuna.tsinghua.edu.cn/simple 'markitdown-mcp==0.0.1a4'
+WORKDIR /workdir
+ENTRYPOINT ["markitdown-mcp"]`,
+    credential: { type: 'env' },
+    requires: [],
+    docs: 'https://github.com/microsoft/markitdown/tree/main/packages/markitdown-mcp',
   },
 ]

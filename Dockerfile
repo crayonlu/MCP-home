@@ -1,7 +1,11 @@
 FROM node:24-alpine AS runtime
 
 # uv / uvx: run Python-based MCP servers (fetch, git, memory, …) from the Market catalog
-RUN apk add --no-cache curl && \
+# docker CLI: run docker-kind Market entries (e.g. markitdown) via `docker run`
+# APK_MIRROR lets slow/blocked networks point apk at a local mirror (e.g. mirrors.tuna.tsinghua.edu.cn/alpine).
+ARG APK_MIRROR=dl-cdn.alpinelinux.org
+RUN sed -i "s#dl-cdn.alpinelinux.org/alpine#${APK_MIRROR}#g" /etc/apk/repositories && \
+    apk add --no-cache curl docker-cli && \
     curl -LsSf https://astral.sh/uv/install.sh | sh && \
     mv /root/.local/bin/uv /root/.local/bin/uvx /usr/local/bin/ && \
     rm -rf /root/.local

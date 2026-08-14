@@ -189,9 +189,10 @@ export interface MarketEntry {
   name: string
   description: string
   category: string
-  kind: 'home-stdio' | 'remote' | 'uvx'
+  kind: 'home-stdio' | 'remote' | 'uvx' | 'docker'
   package?: string
   bin?: string
+  image?: string
   url?: string
   credential: CredentialSpec
   requires: MarketRequirement[]

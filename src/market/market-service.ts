@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { marketCatalog, type MarketEntry } from './catalog.js'
 import { AppError } from '../domain/errors.js'
@@ -214,7 +215,10 @@ export class MarketService {
     const record = this.#store.createInstallJob({
       entryId: entry.id,
       requestedVersion,
-      idempotencyKey: `${entry.id}:${requestedVersion ?? 'latest'}`,
+      // Unique per attempt: a failed/interrupted job keeps its row (audit),
+      // and retrying must not collide on the UNIQUE constraint. Post-success
+      // duplicates are already rejected by the already-installed check.
+      idempotencyKey: `${entry.id}:${requestedVersion ?? 'latest'}:${randomUUID()}`,
       status,
       step: status,
       boundedOutput: '',
@@ -261,6 +265,8 @@ export class MarketService {
         await this.#npmInstall(entry, job);
       } else if (entry.kind === 'uvx') {
         await this.#uvxInstall(entry, job);
+      } else if (entry.kind === 'docker') {
+        await this.#dockerInstall(entry, job);
       }
       this.#update(job, { step: 'creating credential' });
       const credential = this.#service.createCredential({
@@ -301,6 +307,22 @@ export class MarketService {
               command: 'uvx',
               args,
               env: { ...this.#uvEnv },
+            },
+            credentialId: credential.id,
+            enabled: true,
+          }),
+          credential,
+        };
+      } else if (entry.kind === 'docker') {
+        result = {
+          server: await this.#service.createServer({
+            slug: entry.id,
+            name: entry.name,
+            kind: 'home',
+            transport: {
+              type: 'stdio',
+              command: 'docker',
+              args: ['run', '--rm', '-i', entry.image ?? ''],
             },
             credentialId: credential.id,
             enabled: true,
@@ -390,8 +412,58 @@ export class MarketService {
     }
   }
 
-  #uvxInstall(entry: MarketEntry, job: LiveJob): Promise<void> {
-    return new Promise((resolve, reject) => {
+  #runDocker(args: string[], job: LiveJob, step: string): Promise<{ code: number; output: string }> {
+    return new Promise((resolve) => {
+      this.#update(job, { step });
+      const child = spawn('docker', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      let output = '';
+      const append = (chunk: string) => {
+        output = `${output}${chunk}`.slice(-4000);
+        this.#update(job, { output });
+      };
+      child.stdout.on('data', (chunk) => append(String(chunk)));
+      child.stderr.on('data', (chunk) => append(String(chunk)));
+      const timer = setTimeout(() => child.kill('SIGKILL'), 600_000);
+      child.on('close', (code) => {
+        clearTimeout(timer);
+        resolve({ code: code ?? 1, output });
+      });
+      child.on('error', (error) => {
+        clearTimeout(timer);
+        resolve({ code: 1, output: `docker: ${error.message}` });
+      });
+    });
+  }
+
+  async #dockerInstall(entry: MarketEntry, job: LiveJob): Promise<void> {
+    const image = entry.image;
+    if (!image) {
+      throw new AppError('market_install_failed', 'Docker entry is missing an image', 500);
+    }
+    const inspect = await this.#runDocker(['image', 'inspect', image], job, `docker image inspect ${image}`);
+    if (inspect.code === 0) return;
+    const pull = await this.#runDocker(['pull', image], job, `docker pull ${image}`);
+    if (pull.code === 0) return;
+    if (entry.dockerfile !== undefined) {
+      const directory = join(this.#marketDir, 'dockerfiles', entry.id);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, 'Dockerfile'), entry.dockerfile);
+      const build = await this.#runDocker(['build', '-t', image, directory], job, `docker build -t ${image}`);
+      if (build.code === 0) return;
+      throw new AppError(
+        'market_install_failed',
+        `Docker image ${image} could not be pulled or built: ${pull.output.slice(-240)}`,
+        500,
+      );
+    }
+    throw new AppError(
+      'market_install_failed',
+      `Docker image ${image} could not be pulled: ${pull.output.slice(-240)}`,
+      500,
+    );
+  }
+
+  #uvxInstall(entry: MarketEntry, job: LiveJob): Promise<void> {    return new Promise((resolve, reject) => {
       this.#update(job, { step: `uv tool install ${this.#pinnedPackage(entry, 'uvx')}` });
       const args = ['tool', 'install', this.#pinnedPackage(entry, 'uvx')];
       for (const dependency of entry.uvWith ?? []) args.push('--with', dependency);

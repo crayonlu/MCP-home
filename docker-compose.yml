@@ -20,6 +20,11 @@ services:
       MCP_HOME_CALLS_RETENTION_DAYS: ${MCP_HOME_CALLS_RETENTION_DAYS:-30}
     volumes:
       - mcp-home-data:/data
+      # docker-kind Market entries (e.g. markitdown) spawn sibling containers
+      # via the host socket; the runtime user must be in the host docker group.
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "${DOCKER_GROUP_ID:-999}"
     logging:
       driver: json-file
       options:
