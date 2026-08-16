@@ -430,6 +430,7 @@ export interface ToolCallStats {
 export const installJobStatusSchema = z.enum([
   'awaiting_secret',
   'installing',
+  'updating',
   'completed',
   'failed',
   'interrupted',

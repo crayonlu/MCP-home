@@ -287,6 +287,17 @@ export function useMarketUninstall() {
   })
 }
 
+export function useMarketUpdate() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => api.post(`/api/v1/market/${id}/update`),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['market'] })
+      client.invalidateQueries({ queryKey: ['servers'] })
+    },
+  })
+}
+
 export function useServerProjection(id: string) {
   return useQuery({
     queryKey: ['servers', id, 'projection'],

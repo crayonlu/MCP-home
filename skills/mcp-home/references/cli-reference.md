@@ -105,6 +105,8 @@ mcp-home control-key revoke <id>
 mcp-home market list                          # browse catalog with install status
 mcp-home market install <id> --set KEY=value  # install (repeatable --set)
 mcp-home market uninstall <id>                # remove server + credential
+mcp-home market updates                       # installed vs catalog pin (+ upstream latest)
+mcp-home market update <id>                   # update to the catalog pin (keeps credential, restarts)
 ```
 
 ## config
@@ -113,7 +115,16 @@ mcp-home market uninstall <id>                # remove server + credential
 mcp-home config export <file>                 # redacted export
 mcp-home config export <file> --include-secrets  # full backup (0600)
 mcp-home config import <file>                 # restore (atomic transaction)
+mcp-home config import-harness <file> [--preview] [--upsert]
+                                              # import a Claude Desktop / Cursor mcpServers JSON;
+                                              # secrets become encrypted credentials (never echoed)
 ```
+
+Harness import accepts `{ "mcpServers": { name: { command, args, env } | { url, headers } } }`.
+Secret-looking env keys (password/token/secret/key/authorization) and `Authorization` headers
+are stored as encrypted credentials; everything else lands in the server transport.
+`--upsert` re-imports as an update: existing servers are diffed (unchanged → skip,
+changed → update transport/env/credential) instead of reported as conflicts.
 
 ## endpoint
 

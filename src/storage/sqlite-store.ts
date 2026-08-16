@@ -438,7 +438,7 @@ export class SqliteStore implements Store {
         entry_id TEXT NOT NULL,
         requested_version TEXT,
         idempotency_key TEXT NOT NULL UNIQUE,
-        status TEXT NOT NULL CHECK (status IN ('awaiting_secret', 'installing', 'completed', 'failed', 'interrupted')),
+        status TEXT NOT NULL CHECK (status IN ('awaiting_secret', 'installing', 'updating', 'completed', 'failed', 'interrupted')),
         step TEXT NOT NULL,
         bounded_output TEXT NOT NULL,
         result_reference TEXT,
@@ -470,6 +470,39 @@ export class SqliteStore implements Store {
       this.#db.exec(
         "ALTER TABLE api_keys ADD COLUMN scope TEXT DEFAULT 'admin' CHECK (scope IN ('admin', 'agent'))",
       );
+    }
+    // Guarded migration: install_jobs created before the 'updating' status have a
+    // CHECK constraint without it. SQLite cannot alter CHECK constraints, so
+    // rebuild the table (rows are preserved).
+    const installJobsSql = this.#db
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'install_jobs'")
+      .get() as { sql: string } | undefined;
+    if (installJobsSql !== undefined && !installJobsSql.sql.includes("'updating'")) {
+      this.#db.exec(`
+        BEGIN;
+        CREATE TABLE install_jobs_next (
+          id TEXT PRIMARY KEY,
+          entry_id TEXT NOT NULL,
+          requested_version TEXT,
+          idempotency_key TEXT NOT NULL UNIQUE,
+          status TEXT NOT NULL CHECK (status IN ('awaiting_secret', 'installing', 'updating', 'completed', 'failed', 'interrupted')),
+          step TEXT NOT NULL,
+          bounded_output TEXT NOT NULL,
+          result_reference TEXT,
+          action_id TEXT,
+          error_code TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        INSERT INTO install_jobs_next
+          SELECT id, entry_id, requested_version, idempotency_key, status, step,
+                 bounded_output, result_reference, action_id, error_code, created_at, updated_at
+          FROM install_jobs;
+        DROP TABLE install_jobs;
+        ALTER TABLE install_jobs_next RENAME TO install_jobs;
+        CREATE INDEX IF NOT EXISTS idx_install_jobs_status ON install_jobs(status, updated_at);
+        COMMIT;
+      `);
     }
   }
 
@@ -1187,6 +1220,23 @@ export class SqliteStore implements Store {
         record.installedAt,
       );
     return record;
+  }
+
+  updateInstallation(
+    id: string,
+    patch: Partial<Pick<MarketInstallation, 'entryVersion' | 'recipeRevision'>>,
+  ): MarketInstallation {
+    this.#db
+      .prepare(
+        `UPDATE market_installations
+         SET entry_version = COALESCE(?, entry_version),
+             recipe_revision = COALESCE(?, recipe_revision)
+         WHERE id = ?`,
+      )
+      .run(patch.entryVersion ?? null, patch.recipeRevision ?? null, id);
+    const row = this.#db.prepare('SELECT * FROM market_installations WHERE id = ?').get(id);
+    if (row === undefined) throw new AppError('market_installation_not_found', 'Installation not found', 404);
+    return this.#parseInstallation(row);
   }
 
   deleteInstallation(id: string): void {

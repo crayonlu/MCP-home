@@ -11,8 +11,14 @@ import {
   updateServerInputSchema,
   type ApiKeyKind,
   type CredentialPayload,
+  type ServerRecord,
   type TransportConfig,
 } from '../domain/models.js';
+import {
+  parseHarnessConfig,
+  toPreview,
+  type HarnessImportedEntry,
+} from '../config/harness-import.js';
 import type { AuthService } from '../security/auth-service.js';
 import type { Store } from '../storage/store.js';
 import type { UpstreamManager } from '../upstream/manager.js';
@@ -460,14 +466,157 @@ export class ControlService {
     return imported;
   }
 
+  async importHarnessConfig(value: unknown, preview = false, mode: 'create' | 'upsert' = 'create') {
+    const entries = parseHarnessConfig(value);
+    if (preview) {
+      return {
+        preview: true,
+        entries: entries.map((entry) => this.#harnessPreview(entry, mode)),
+      };
+    }
+    const results = await Promise.all(entries.map(async (entry) => {
+      const existing = this.#store.getServerBySlug(entry.slug);
+      if (existing) {
+        if (mode === 'create') {
+          return {
+            name: entry.name,
+            slug: entry.slug,
+            status: 'conflict',
+            message: `A server with slug "${entry.slug}" already exists`,
+            warnings: entry.warnings,
+          };
+        }
+        const changes = this.#harnessDiff(entry, existing);
+        if (changes.length === 0) {
+          return { name: entry.name, slug: entry.slug, status: 'unchanged', warnings: entry.warnings };
+        }
+        const outcome = this.#applyHarnessUpdate(entry, existing, changes);
+        return outcome;
+      }
+      const created = this.#store.transaction(() => {
+        let credentialId: string | null = null;
+        if (entry.credential !== null) {
+          credentialId = this.#store.createCredential({
+            name: entry.credential.name,
+            payload: entry.credential.payload,
+          }).id;
+        }
+        const server = this.#store.createServer(
+          createServerInputSchema.parse({
+            slug: entry.slug,
+            name: entry.name,
+            kind: entry.kind,
+            transport: entry.transport,
+            credentialId,
+            enabled: true,
+          }),
+        );
+        return { serverId: server.id, credentialId };
+      });
+      this.#refreshInBackground(created.serverId);
+      return {
+        name: entry.name,
+        slug: entry.slug,
+        status: 'created',
+        serverId: created.serverId,
+        credentialId: created.credentialId,
+        warnings: entry.warnings,
+      };
+    }));
+    return { preview: false, entries: results };
+  }
+
+  /** Preview with per-entry status (created/changed/unchanged/conflict) — secrets masked. */
+  #harnessPreview(entry: HarnessImportedEntry, mode: 'create' | 'upsert') {
+    const base = toPreview(entry);
+    const existing = this.#store.getServerBySlug(entry.slug);
+    if (!existing) return { ...base, status: 'created', changes: [] as string[] };
+    if (mode === 'create') {
+      return {
+        ...base,
+        status: 'conflict',
+        changes: [] as string[],
+        message: `A server with slug "${entry.slug}" already exists`,
+      };
+    }
+    const changes = this.#harnessDiff(entry, existing);
+    return { ...base, status: changes.length === 0 ? 'unchanged' : 'changed', changes };
+  }
+
+  /** Field-level diff between a parsed entry and the stored server — names only, never values. */
+  #harnessDiff(entry: HarnessImportedEntry, existing: ServerRecord): string[] {
+    const changes: string[] = [];
+    const current = existing.transport;
+    const next = entry.transport;
+    if (next.type === 'streamable-http' && current.type === 'streamable-http') {
+      if (current.url !== next.url) changes.push('url');
+      if (JSON.stringify(current.headers) !== JSON.stringify(next.headers)) {
+        changes.push('headers');
+      }
+    } else if (next.type === 'stdio' && current.type === 'stdio') {
+      if (current.command !== next.command) changes.push('command');
+      if (JSON.stringify(current.args) !== JSON.stringify(next.args)) changes.push('args');
+      if (JSON.stringify(current.env ?? {}) !== JSON.stringify(next.env ?? {})) changes.push('env');
+    } else if (current.type !== next.type) {
+      changes.push('transport');
+    }
+    const currentPayload = existing.credentialId
+      ? this.#store.getCredentialPayload(existing.credentialId)
+      : null;
+    const nextPayload = entry.credential?.payload ?? null;
+    if (JSON.stringify(currentPayload ?? null) !== JSON.stringify(nextPayload)) {
+      changes.push('credential');
+    }
+    return changes;
+  }
+
+  #applyHarnessUpdate(
+    entry: HarnessImportedEntry,
+    existing: ServerRecord,
+    changes: string[],
+  ): Promise<{
+    name: string;
+    slug: string;
+    status: string;
+    serverId: string;
+    changes: string[];
+    warnings: string[];
+  }> {
+    return (async () => {
+      if (changes.some((change) => change !== 'credential')) {
+        await this.updateServer(existing.id, { transport: entry.transport });
+      }
+      if (changes.includes('credential')) {
+        if (existing.credentialId && entry.credential) {
+          await this.updateCredential(existing.credentialId, { payload: entry.credential.payload });
+        } else if (!existing.credentialId && entry.credential) {
+          const credential = this.#store.createCredential({
+            name: entry.credential.name,
+            payload: entry.credential.payload,
+          });
+          await this.updateServer(existing.id, { credentialId: credential.id });
+        }
+        // credential removed from the harness config is kept — stripping a
+        // credential silently would break a working server; report instead.
+      }
+      return {
+        name: entry.name,
+        slug: entry.slug,
+        status: 'changed',
+        serverId: existing.id,
+        changes,
+        warnings: entry.warnings,
+      };
+    })();
+  }
+
   #assertCredentialAssignment(
     credentialId: string | null,
     serverKind: 'remote' | 'home',
     serverId?: string,
   ): void {
     if (credentialId === null) return;
-    const payload = this.#store.getCredentialPayload(credentialId);
-    if (!payload) throw new AppError('credential_not_found', 'Credential not found', 400);
+    const payload = this.#store.getCredentialPayload(credentialId);    if (!payload) throw new AppError('credential_not_found', 'Credential not found', 400);
     this.#assertCredentialPayload(payload, serverKind);
     if (payload.type !== 'oauth') return;
     const reused = this.#store

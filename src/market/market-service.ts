@@ -69,8 +69,53 @@ export class MarketService {
         ...entry,
         installed: servers.some((server) => server.slug === entry.id),
         installedVersion: installation?.entryVersion ?? null,
+        updateAvailable:
+          installation !== null && (entry.version ?? 'unpinned') !== installation.entryVersion,
       };
     });
+  }
+
+  /**
+   * Per-entry version drift: installed version vs the catalog pin (deterministic,
+   * no network) plus a best-effort upstream lookup (registry JSON, short timeout).
+   */
+  async updates() {
+    const entries = marketCatalog
+      .map((entry) => ({ entry, installation: this.#store.getInstallation(entry.id) }))
+      .filter((item) => item.installation !== null);
+    return Promise.all(
+      entries.map(async ({ entry, installation }) => {
+        const catalogVersion = entry.version ?? 'unpinned';
+        return {
+          entryId: entry.id,
+          installedVersion: installation!.entryVersion,
+          catalogVersion,
+          updateAvailable: catalogVersion !== installation!.entryVersion,
+          latestUpstream: await this.#latestUpstream(entry),
+        };
+      }),
+    );
+  }
+
+  /**
+   * Explicit update to the catalog's current pin. Reinstalls the package, bumps
+   * the installation record, and restarts the server — the credential and
+   * visibility configuration survive. On failure the old process keeps running.
+   */
+  async update(id: string): Promise<{ jobId: string | null; status: string }> {
+    const entry = this.#entry(id);
+    const installation = this.#store.getInstallation(entry.id);
+    if (!installation) {
+      throw new AppError('market_not_installed', `Market entry "${id}" is not installed`, 404);
+    }
+    const catalogVersion = entry.version ?? 'unpinned';
+    if (installation.entryVersion === catalogVersion) {
+      return { jobId: null, status: 'up_to_date' };
+    }
+    const job = this.#createJob(entry, entry.version ?? null, 'updating');
+    this.#update(job, { step: 'starting update' });
+    void this.#runUpdate(entry, installation, job);
+    return { jobId: job.record.id, status: 'updating' };
   }
 
   installations() {
@@ -375,6 +420,83 @@ export class MarketService {
     return entry;
   }
 
+  async #runUpdate(entry: MarketEntry, installation: MarketInstallation, job: LiveJob) {
+    try {
+      // Remote entries carry no package; only the recipe revision can drift.
+      if (entry.kind === 'home-stdio') {
+        await this.#npmInstall(entry, job);
+      } else if (entry.kind === 'uvx') {
+        await this.#uvxInstall(entry, job);
+      } else if (entry.kind === 'docker') {
+        await this.#dockerInstall(entry, job, true);
+      }
+      this.#update(job, { step: 'updating installation record' });
+      const updated = this.#store.updateInstallation(installation.id, {
+        entryVersion: entry.version ?? 'unpinned',
+        recipeRevision: fingerprint(entry),
+      });
+      this.#update(job, { step: 'restarting server' });
+      // The package is already updated; a failed restart must not roll the job
+      // back — the old process (or a later manual restart) keeps serving.
+      let restartError: string | undefined;
+      try {
+        await this.#service.restartServer(installation.serverId);
+      } catch (error) {
+        restartError = error instanceof Error ? error.message : String(error);
+      }
+      this.#update(job, {
+        step: 'done',
+        result: {
+          entryId: entry.id,
+          version: updated.entryVersion,
+          serverId: installation.serverId,
+          ...(restartError === undefined ? {} : { restartError }),
+        },
+      });
+      this.#updateRecord(job, { status: 'completed', resultReference: installation.id });
+    } catch (error) {
+      try {
+        this.#update(job, {
+          step: 'failed',
+          error: error instanceof Error ? error.message : String(error),
+        });
+        this.#updateRecord(job, {
+          status: 'failed',
+          errorCode: error instanceof AppError ? error.code : 'market_update_failed',
+        });
+      } catch {
+        // Runtime torn down mid-update; nothing to persist.
+      }
+    }
+  }
+
+  /** Best-effort latest upstream version; null when unreachable or unsupported. */
+  async #latestUpstream(entry: MarketEntry): Promise<string | null> {
+    const pkg = entry.package;
+    if (pkg === undefined) return null;
+    const url =
+      entry.kind === 'uvx'
+        ? `https://pypi.org/pypi/${pkg}/json`
+        : entry.kind === 'home-stdio'
+          ? `https://registry.npmmirror.com/${pkg}/latest`
+          : null;
+    if (url === null) return null;
+    try {
+      const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (!response.ok) return null;
+      const body = (await response.json()) as { version?: unknown; info?: { version?: unknown } };
+      const version =
+        typeof body.version === 'string'
+          ? body.version
+          : typeof body.info?.version === 'string'
+            ? body.info.version
+            : null;
+      return version;
+    } catch {
+      return null;
+    }
+  }
+
   #binPath(entry: MarketEntry): string {
     return join(this.#marketDir, 'node_modules', '.bin', entry.bin ?? entry.id);
   }
@@ -435,12 +557,14 @@ export class MarketService {
     });
   }
 
-  async #dockerInstall(entry: MarketEntry, job: LiveJob): Promise<void> {
+  async #dockerInstall(entry: MarketEntry, job: LiveJob, force = false): Promise<void> {
     const image = entry.image;
     if (!image) {
       throw new AppError('market_install_failed', 'Docker entry is missing an image', 500);
     }
-    const inspect = await this.#runDocker(['image', 'inspect', image], job, `docker image inspect ${image}`);
+    const inspect = force
+      ? { code: 1, output: '' }
+      : await this.#runDocker(['image', 'inspect', image], job, `docker image inspect ${image}`);
     if (inspect.code === 0) return;
     const pull = await this.#runDocker(['pull', image], job, `docker pull ${image}`);
     if (pull.code === 0) return;

@@ -93,6 +93,10 @@ export interface Store {
   listInstallations(): MarketInstallation[];
   getInstallation(entryId: string): MarketInstallation | null;
   createInstallation(input: Omit<MarketInstallation, 'id' | 'installedAt'>): MarketInstallation;
+  updateInstallation(
+    id: string,
+    patch: Partial<Pick<MarketInstallation, 'entryVersion' | 'recipeRevision'>>,
+  ): MarketInstallation;
   deleteInstallation(id: string): void;
   createInstallJob(input: Omit<InstallJobRecord, 'id' | 'createdAt' | 'updatedAt'>): InstallJobRecord;
   getInstallJob(id: string): InstallJobRecord | null;

@@ -1,4 +1,4 @@
-import { Download, KeySquare, ShieldAlert, Terminal, Upload } from 'lucide-react'
+import { Download, FileJson, KeySquare, ShieldAlert, Terminal, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { api } from '../../api/client'
 import {
@@ -26,6 +26,23 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
+interface HarnessPreviewEntry {
+  name: string
+  slug: string
+  kind: 'remote' | 'home'
+  transportSummary: string
+  credential: { name: string; type: string; fields: { name: string; masked: boolean }[] } | null
+  warnings: string[]
+}
+
+interface HarnessImportResult {
+  preview: boolean
+  entries: (HarnessPreviewEntry & {
+    status?: string
+    message?: string
+  })[]
+}
+
 export function SettingsPage() {
   const { t } = useI18n()
   const { locale, setLocale } = useI18n()
@@ -41,6 +58,9 @@ export function SettingsPage() {
   const [secret, setSecret] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
   const [running, setRunning] = useState(false)
+  const [harnessText, setHarnessText] = useState('')
+  const [harnessBusy, setHarnessBusy] = useState(false)
+  const [harnessResult, setHarnessResult] = useState<HarnessImportResult | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const [method, setMethod] = useState('GET')
   const [path, setPath] = useState('/api/v1/overview')
@@ -79,6 +99,21 @@ export function SettingsPage() {
     } finally {
       setImporting(false)
       if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  const importHarness = async (preview: boolean) => {
+    setHarnessBusy(true)
+    setHarnessResult(null)
+    try {
+      const config = JSON.parse(harnessText)
+      const result = await api.post('/api/v1/config/import-harness', { config, preview })
+      setHarnessResult(result as HarnessImportResult)
+      if (!preview) toast('imported', 'success')
+    } catch (error) {
+      toast((error as Error).message, 'error')
+    } finally {
+      setHarnessBusy(false)
     }
   }
 
@@ -154,6 +189,68 @@ export function SettingsPage() {
             }}
           />
         </div>
+      </Section>
+
+      <Section title={t('settings.harnessImport')}>
+        <p className="text-xs text-ink-3">{t('settings.harnessHint')}</p>
+        <TextareaField
+          value={harnessText}
+          onChange={setHarnessText}
+          mono
+          rows={6}
+          placeholder={t('settings.harnessPlaceholder')}
+        />
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            loading={harnessBusy}
+            disabled={!harnessText.trim()}
+            onClick={() => importHarness(true)}
+          >
+            <FileJson className="size-4" />
+            {t('settings.harnessPreview')}
+          </Button>
+          <Button
+            loading={harnessBusy}
+            disabled={!harnessText.trim()}
+            onClick={() => importHarness(false)}
+          >
+            <Upload className="size-4" />
+            {t('settings.harnessImportButton')}
+          </Button>
+        </div>
+        {harnessResult && (
+          <div className="flex flex-col divide-y divide-ink-3/10 bg-surface">
+            {harnessResult.entries.map((entry) => (
+              <div key={entry.slug} className="flex flex-col gap-1 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-ink">{entry.name}</span>
+                  <Badge tone={entry.kind === 'remote' ? 'accent' : 'neutral'}>{entry.kind}</Badge>
+                  {entry.status && (
+                    <Badge tone={entry.status === 'created' ? 'accent' : 'warning'}>
+                      {t(`settings.harnessStatus.${entry.status}`)}
+                    </Badge>
+                  )}
+                </div>
+                <code className="truncate font-mono text-xs text-ink-3">
+                  {entry.transportSummary}
+                </code>
+                {entry.credential && (
+                  <span className="text-xs text-ink-3">
+                    {t('settings.harnessCredential')}: {entry.credential.type} (
+                    {entry.credential.fields.map((field) => field.name).join(', ')})
+                  </span>
+                )}
+                {entry.message && <span className="text-xs text-warning">{entry.message}</span>}
+                {entry.warnings.map((warning) => (
+                  <span key={warning} className="text-xs text-warning">
+                    {warning}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
       </Section>
 
       <Section title={t('settings.controlKeys')}>

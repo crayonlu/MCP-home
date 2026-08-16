@@ -243,6 +243,23 @@ config
   .action(
     run((client, file: string) => client.request('POST', '/api/v1/config/import', readJson(file))),
   );
+config
+  .command('import-harness <file>')
+  .description(
+    'Import a harness mcpServers config (Claude Desktop / Cursor JSON); secrets become encrypted credentials',
+  )
+  .option('--preview', 'show what would be imported without writing anything')
+  .option('--upsert', 'update existing servers (transport/env) instead of reporting conflicts')
+  .action(
+    run((client, file: string, command: Command) => {
+      const options = command.opts<{ preview?: boolean; upsert?: boolean }>();
+      return client.request('POST', '/api/v1/config/import-harness', {
+        config: readJson(file),
+        preview: options.preview ?? false,
+        ...(options.upsert ? { mode: 'upsert' } : {}),
+      });
+    }),
+  );
 
 const endpoint = program.command('endpoint').description('Print standard MCP endpoints');
 endpoint
@@ -295,6 +312,36 @@ market
   .command('uninstall <id>')
   .description('Remove an installed catalog entry (server + credential)')
   .action(run((client, id: string) => client.request('POST', `/api/v1/market/${id}/uninstall`)));
+market
+  .command('updates')
+  .description('Compare installed versions against catalog pins and upstream')
+  .action(run((client) => client.request('GET', '/api/v1/market/updates')));
+market
+  .command('update <id>')
+  .description('Update an installed entry to the catalog pin (keeps credential, restarts server)')
+  .action(
+    run(async (client, id: string) => {
+      const started = (await client.request('POST', `/api/v1/market/${id}/update`)) as {
+        jobId: string | null;
+        status: string;
+      };
+      if (started.status === 'up_to_date' || started.jobId === null) return started;
+      for (;;) {
+        const job = (await client.request('GET', `/api/v1/market/install/${started.jobId}`)) as {
+          status: string;
+          step: string;
+          result?: unknown;
+          error?: string;
+        };
+        if (job.status !== 'updating') {
+          if (job.status === 'failed') throw new Error(job.error ?? 'Update failed');
+          return job.result ?? job;
+        }
+        process.stdout.write(`\rupdating: ${job.step}…   `);
+        await sleep(1500);
+      }
+    }),
+  );
 
 program.command('status').action(run((client) => client.request('GET', '/api/v1/overview')));
 program.command('doctor').action(run((client) => client.request('GET', '/api/v1/diagnostics')));

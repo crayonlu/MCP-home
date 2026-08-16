@@ -232,7 +232,12 @@ export function controlOpenApi(publicUrl: URL): Record<string, unknown> {
     ],
   });
   add('/api/v1/config/import', 'post', 'importConfig', {
-    summary: 'Atomically import a restorable configuration backup',
+    summary: 'Atomically import a restorable configuration backup (admin)',
+    body: true,
+  });
+  add('/api/v1/config/import-harness', 'post', 'importHarnessConfig', {
+    summary:
+      'Import a harness mcpServers config (Claude Desktop / Cursor JSON); secrets become encrypted credentials (admin)',
     body: true,
   });
   add('/api/v1/endpoints/aggregate', 'get', 'getAggregateEndpoint', {
@@ -240,6 +245,14 @@ export function controlOpenApi(publicUrl: URL): Record<string, unknown> {
   });
   add('/api/v1/market', 'get', 'listMarket', {
     summary: 'List the curated market catalog with install state',
+  });
+  add('/api/v1/market/updates', 'get', 'listMarketUpdates', {
+    summary: 'Compare installed versions against catalog pins (plus best-effort upstream latest)',
+  });
+  add('/api/v1/market/{entry_id}/update', 'post', 'updateMarketEntry', {
+    summary:
+      'Explicitly update an installed entry to the catalog pin; keeps credential and visibility, restarts the server',
+    parameters: [{ name: 'entry_id', in: 'path', required: true, schema: { type: 'string' } }],
   });
   add('/api/v1/market/installations', 'get', 'listMarketInstallations', {
     summary: 'List recorded market installs (source, version, recipe)',

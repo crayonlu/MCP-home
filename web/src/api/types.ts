@@ -198,6 +198,8 @@ export interface MarketEntry {
   requires: MarketRequirement[]
   argsTemplate?: string[]
   installed: boolean
+  installedVersion: string | null
+  updateAvailable: boolean
 }
 
 export type Visibility = 'visible' | 'hidden'

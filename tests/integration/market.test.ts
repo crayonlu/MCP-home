@@ -258,6 +258,134 @@ describe('market', () => {
     }
   });
 
+  it('installs an npm home-stdio entry with an env credential (mosaic)', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'mcp-home-npm-'));
+    const npmPath = join(fakeBin, 'npm');
+    writeFileSync(npmPath, '#!/bin/sh\necho "npm $@" >&2\nexit 0\n');
+    chmodSync(npmPath, 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${fakeBin}:${previousPath}`;
+    const { runtime, controlKey, close } = createTestRuntime();
+    try {
+      const result = (await installEntry(runtime, controlKey, 'mosaic', {
+        MOSAIC_SERVER_URL: 'https://m.cyncyn.xyz',
+        MOSAIC_USERNAME: 'crayon',
+        MOSAIC_PASSWORD: 'crayoncrayon',
+      })) as { server: unknown; credential: unknown };
+      const server = serverRecordSchema.parse(result.server);
+      const credential = credentialRecordSchema.parse(result.credential);
+      expect(server.slug).toBe('mosaic');
+      expect(server.transport.type).toBe('stdio');
+      if (server.transport.type === 'stdio') {
+        expect(server.transport.command).toContain('mosaic-mcp');
+        expect(server.transport.args).toEqual([]);
+      }
+      expect(credential.type).toBe('env');
+      const installations = (await jsonResponse(
+        await controlRequest(runtime, controlKey, 'GET', '/api/v1/market/installations'),
+      )) as { entryId: string; entryVersion: string; source: string }[];
+      const row = installations.find((item) => item.entryId === 'mosaic');
+      expect(row?.source).toBe('curated');
+      expect(row?.entryVersion).toBe('0.1.0');
+    } finally {
+      await close();
+      process.env.PATH = previousPath;
+    }
+  });
+
+  it('updates an installed entry to the catalog pin, keeping the credential', async () => {
+    const fakeBin = mkdtempSync(join(tmpdir(), 'mcp-home-uv-update-'));
+    const uvPath = join(fakeBin, 'uv');
+    const argsLog = join(fakeBin, 'uv-args.log');
+    writeFileSync(uvPath, `#!/bin/sh\necho "$@" >> "${argsLog}"\nexit 0\n`);
+    chmodSync(uvPath, 0o755);
+    const previousPath = process.env.PATH;
+    process.env.PATH = `${fakeBin}:${previousPath}`;
+    const { runtime, controlKey, close } = createTestRuntime();
+    try {
+      const result = (await installEntry(runtime, controlKey, 'fetch')) as {
+        server: { id: string; credentialId: string | null };
+      };
+      const credentialId = result.server.credentialId;
+
+      // No drift yet: up_to_date is idempotent.
+      const noDrift = (await jsonResponse(
+        await controlRequest(runtime, controlKey, 'POST', '/api/v1/market/fetch/update', {}),
+      )) as { status: string };
+      expect(noDrift.status).toBe('up_to_date');
+
+      // Simulate an older installed version.
+      const installations = (await jsonResponse(
+        await controlRequest(runtime, controlKey, 'GET', '/api/v1/market/installations'),
+      )) as { id: string; entryId: string; entryVersion: string }[];
+      const installation = installations.find((item) => item.entryId === 'fetch');
+      runtime.store.updateInstallation(installation!.id, { entryVersion: '2025.1.1' });
+
+      const updates = (await jsonResponse(
+        await controlRequest(runtime, controlKey, 'GET', '/api/v1/market/updates'),
+      )) as {
+        entryId: string;
+        installedVersion: string;
+        catalogVersion: string;
+        updateAvailable: boolean;
+        latestUpstream: string | null;
+      }[];
+      const fetchUpdate = updates.find((item) => item.entryId === 'fetch');
+      expect(fetchUpdate?.installedVersion).toBe('2025.1.1');
+      expect(fetchUpdate?.catalogVersion).toBe('2026.7.10');
+      expect(fetchUpdate?.updateAvailable).toBe(true);
+
+      const list = (await marketList(runtime, controlKey)) as (MarketItem & {
+        updateAvailable: boolean;
+      })[];
+      expect(list.find((item) => item.id === 'fetch')?.updateAvailable).toBe(true);
+
+      // Run the update; the fake uv succeeds, the (real) uvx restart fails but
+      // must not fail the job — the package and record are already updated.
+      const started = (await jsonResponse(
+        await controlRequest(runtime, controlKey, 'POST', '/api/v1/market/fetch/update', {}),
+      )) as { jobId: string; status: string };
+      expect(started.status).toBe('updating');
+      let job: { status: string; result?: { version?: string; restartError?: string } };
+      for (;;) {
+        job = (await jsonResponse(
+          await controlRequest(
+            runtime,
+            controlKey,
+            'GET',
+            `/api/v1/market/install/${started.jobId}`,
+          ),
+        )) as typeof job;
+        if (job.status !== 'updating') break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(job.status).toBe('completed');
+      expect(job.result?.version).toBe('2026.7.10');
+
+      // The reinstall hit the catalog pin again.
+      const log = readFileSync(argsLog, 'utf8');
+      expect(log.match(/tool install mcp-server-fetch==2026\.7\.10/g)?.length).toBe(2);
+
+      // Installation record bumped; server kept its credential.
+      const after = (await jsonResponse(
+        await controlRequest(runtime, controlKey, 'GET', '/api/v1/market/installations'),
+      )) as { entryId: string; entryVersion: string }[];
+      expect(after.find((item) => item.entryId === 'fetch')?.entryVersion).toBe('2026.7.10');
+      const server = (await jsonResponse(
+        await controlRequest(runtime, controlKey, 'GET', `/api/v1/servers/${result.server.id}`),
+      )) as { credentialId: string | null };
+      expect(server.credentialId).toBe(credentialId);
+
+      const listAfter = (await marketList(runtime, controlKey)) as (MarketItem & {
+        updateAvailable: boolean;
+      })[];
+      expect(listAfter.find((item) => item.id === 'fetch')?.updateAvailable).toBe(false);
+    } finally {
+      await close();
+      process.env.PATH = previousPath;
+    }
+  });
+
   it('marks install jobs interrupted across a process restart instead of losing them', async () => {
     const fakeBin = mkdtempSync(join(tmpdir(), 'mcp-home-uv-slow-'));
     const uvPath = join(fakeBin, 'uv');

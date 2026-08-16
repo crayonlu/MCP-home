@@ -1,7 +1,8 @@
-import { Boxes, Plug, Trash2 } from 'lucide-react'
+import { Boxes, Plug, RefreshCw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useMarket, useMarketUninstall } from '../../app/queries'
+import { api } from '../../api/client'
 import { useI18n } from '../../i18n'
 import { useToast } from '../../components/ui/Toast'
 import { useConfirm } from '../../components/ui/ConfirmDialog'
@@ -29,9 +30,40 @@ export function MarketPage() {
   const { toast } = useToast()
   const confirm = useConfirm()
   const navigate = useNavigate()
-  const { data: entries, isLoading } = useMarket()
+  const { data: entries, isLoading, refetch } = useMarket()
   const uninstall = useMarketUninstall()
   const [installTarget, setInstallTarget] = useState<MarketEntry | null>(null)
+  const [updatingId, setUpdatingId] = useState<string | null>(null)
+
+  const update = async (entry: MarketEntry) => {
+    setUpdatingId(entry.id)
+    try {
+      const started = (await api.post(`/api/v1/market/${entry.id}/update`)) as {
+        jobId: string | null
+        status: string
+      }
+      if (started.status === 'up_to_date' || started.jobId === null) {
+        toast(t('market.upToDate'), 'success')
+        return
+      }
+      for (;;) {
+        const job = await api.get<{ status: string; error?: string }>(
+          `/api/v1/market/install/${started.jobId}`,
+        )
+        if (job.status !== 'updating') {
+          if (job.status === 'failed') toast(job.error ?? 'update failed', 'error')
+          else toast(`✓ ${entry.name} ${t('market.updated')}`, 'success')
+          refetch()
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1500))
+      }
+    } catch (error) {
+      toast((error as Error).message, 'error')
+    } finally {
+      setUpdatingId(null)
+    }
+  }
 
   const remove = async (entry: MarketEntry) => {
     const ok = await confirm({
@@ -79,16 +111,33 @@ export function MarketPage() {
                     {categoryLabel[entry.category] ?? entry.category}
                   </div>
                 </div>
-                {entry.installed ? (
-                  <StatusDot tone="success" />
-                ) : (
-                  <StatusDot tone="neutral" />
-                )}
+                <div className="flex items-center gap-2">
+                  {entry.installed && entry.updateAvailable && (
+                    <Badge tone="warning">{t('market.updateAvailable')}</Badge>
+                  )}
+                  {entry.installed ? (
+                    <StatusDot tone="success" />
+                  ) : (
+                    <StatusDot tone="neutral" />
+                  )}
+                </div>
               </div>
               <p className="line-clamp-2 min-h-[32px] text-[13px] text-ink-2">
                 {entry.description}
               </p>
               <div className="flex items-center justify-between">
+                {entry.installed && entry.updateAvailable && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    loading={updatingId === entry.id}
+                    disabled={updatingId !== null}
+                    onClick={() => update(entry)}
+                  >
+                    <RefreshCw className="size-3.5" />
+                    {t('market.update')}
+                  </Button>
+                )}
                 {entry.installed ? (
                   <Button
                     variant="ghost"

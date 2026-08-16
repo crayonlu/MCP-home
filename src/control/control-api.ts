@@ -301,8 +301,26 @@ export function mountControlApi(
     }),
   );
   app.post(
+    '/api/v1/config/import-harness',
+    adminRoute(async (context) => {
+      const body = (await context.req.json()) as {
+        config?: unknown;
+        preview?: boolean;
+        mode?: 'create' | 'upsert';
+      };
+      if (body.config === undefined) {
+        throw new AppError('invalid_input', 'Missing "config" (the mcpServers object)', 400);
+      }
+      return options.service.importHarnessConfig(
+        body.config,
+        body.preview === true,
+        body.mode === 'upsert' ? 'upsert' : 'create',
+      );
+    }),
+  );
+  app.post(
     '/api/v1/config/import',
-    route(async (context) => options.service.importConfig(await context.req.json())),
+    adminRoute(async (context) => options.service.importConfig(await context.req.json())),
   );
   app.get(
     '/api/v1/endpoints/aggregate',
@@ -313,10 +331,12 @@ export function mountControlApi(
   if (market) {
     app.get('/api/v1/market', route(() => market.list()));
     app.get('/api/v1/market/installations', route(() => market.installations()));
+    app.get('/api/v1/market/updates', route(() => market.updates()));
     app.get(
       '/api/v1/market/install/:jobId',
       route((context) => market.getJob(context.req.param('jobId'))),
     );
+    app.post('/api/v1/market/:id/update', route((context) => market.update(context.req.param('id'))));
     app.post(
       '/api/v1/market/:id/install',
       route(async (context) => {
