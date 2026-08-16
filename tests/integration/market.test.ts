@@ -286,7 +286,7 @@ describe('market', () => {
       )) as { entryId: string; entryVersion: string; source: string }[];
       const row = installations.find((item) => item.entryId === 'mosaic');
       expect(row?.source).toBe('curated');
-      expect(row?.entryVersion).toBe('0.1.0');
+      expect(row?.entryVersion).toBe('0.2.0');
     } finally {
       await close();
       process.env.PATH = previousPath;
