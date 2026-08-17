@@ -36,6 +36,12 @@ const envSchema = z
       z.url().optional(),
     ),
     MCP_HOME_CALLS_RETENTION_DAYS: z.coerce.number().int().min(0).default(30),
+    MCP_HOME_OAUTH_REFRESH_INTERVAL_SECONDS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(86_400)
+      .default(300),
   })
   .superRefine((value, context) => {
     if (value.MCP_HOME_BOOTSTRAP_CONTROL_KEY === value.MCP_HOME_MASTER_KEY) {
@@ -62,6 +68,8 @@ export interface RuntimeConfig {
   marketDir: string;
   uvIndexUrl?: string;
   callsRetentionDays: number;
+  /** Seconds between automatic sweeps that refresh expiring OAuth credentials. */
+  oauthRefreshIntervalSeconds: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
@@ -86,13 +94,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     allowedHosts: configuredHosts.length === 0 ? [publicUrl.hostname] : configuredHosts,
     logLevel: parsed.MCP_HOME_LOG_LEVEL,
     oauthUrlClientId: parsed.MCP_HOME_OAUTH_URL_CLIENT_ID === 'true',
-    ...(parsed.MCP_HOME_WEB_DIR === undefined
-      ? {}
-      : { webDir: resolve(parsed.MCP_HOME_WEB_DIR) }),
+    ...(parsed.MCP_HOME_WEB_DIR === undefined ? {} : { webDir: resolve(parsed.MCP_HOME_WEB_DIR) }),
     marketDir: resolve(parsed.MCP_HOME_MARKET_DIR ?? join(dataDir, 'market')),
     ...(parsed.MCP_HOME_UV_INDEX_URL === undefined
       ? {}
       : { uvIndexUrl: parsed.MCP_HOME_UV_INDEX_URL.toString() }),
     callsRetentionDays: parsed.MCP_HOME_CALLS_RETENTION_DAYS,
+    oauthRefreshIntervalSeconds: parsed.MCP_HOME_OAUTH_REFRESH_INTERVAL_SECONDS,
   };
 }

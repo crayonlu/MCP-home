@@ -61,6 +61,7 @@ async function main(): Promise<void> {
     oauthUrlClientId: true,
     marketDir: join(directory, 'market'),
     callsRetentionDays: 30,
+    oauthRefreshIntervalSeconds: 3600,
   });
   try {
     const started = (await call(runtime, 'POST', '/api/v1/market/fetch/install', {

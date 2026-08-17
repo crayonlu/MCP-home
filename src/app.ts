@@ -1,5 +1,8 @@
 import { loadConfig, type RuntimeConfig } from './config.js';
 import { serveStatic } from '@hono/node-server/serve-static';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { mountControlApi } from './control/control-api.js';
 import { ControlService } from './control/control-service.js';
 import { DataPlane } from './data-plane/data-plane.js';
@@ -22,6 +25,7 @@ import { SqliteStore } from './storage/sqlite-store.js';
 import type { Store } from './storage/store.js';
 import { CredentialResolver } from './upstream/credential-resolver.js';
 import { UpstreamManager } from './upstream/manager.js';
+import { OAuthRefreshSweeper } from './upstream/oauth-refresh.js';
 import { UpstreamOAuthService } from './upstream/oauth-service.js';
 import { mountUpstreamOAuthRoutes } from './upstream/oauth-routes.js';
 
@@ -33,6 +37,22 @@ export interface ApplicationRuntime {
   upstreams: UpstreamManager;
   dataPlane: DataPlane;
   close(): Promise<void>;
+}
+
+/** Version of this package, read from package.json so it can never drift. */
+function packageVersion(): string {
+  let directory = dirname(fileURLToPath(import.meta.url));
+  for (;;) {
+    try {
+      return (
+        JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8')) as { version: string }
+      ).version;
+    } catch {
+      const parent = dirname(directory);
+      if (parent === directory) return '0.0.0';
+      directory = parent;
+    }
+  }
 }
 
 export function createApplication(config: RuntimeConfig = loadConfig()): ApplicationRuntime {
@@ -145,7 +165,7 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
     app.get('/', (context) =>
       context.json({
         name: 'MCP Home',
-        version: '0.1.0',
+        version: packageVersion(),
         message: 'MCP Home is running. Manage it with the mcp-home CLI.',
         endpoints: { mcp: '/mcp', controlApi: '/api/v1', openapi: '/api/v1/openapi.json' },
       }),
@@ -162,6 +182,9 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
     });
   }
 
+  const oauthSweeper = new OAuthRefreshSweeper(store, upstreamOAuth, logger);
+  oauthSweeper.start(config.oauthRefreshIntervalSeconds);
+
   return {
     app,
     config,
@@ -170,6 +193,7 @@ export function createApplication(config: RuntimeConfig = loadConfig()): Applica
     upstreams,
     dataPlane,
     async close() {
+      await oauthSweeper.stop();
       await management.close();
       await dataPlane.close();
       await upstreams.close();

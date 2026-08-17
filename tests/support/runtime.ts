@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApplication, type ApplicationRuntime } from '../../src/app.js';
+import type { RuntimeConfig } from '../../src/config.js';
 
 export interface TestRuntime {
   runtime: ApplicationRuntime;
@@ -10,7 +11,11 @@ export interface TestRuntime {
   close(): Promise<void>;
 }
 
-export function createTestRuntime(options?: { directory?: string; persist?: boolean }): TestRuntime {
+export function createTestRuntime(options?: {
+  directory?: string;
+  persist?: boolean;
+  config?: Partial<RuntimeConfig>;
+}): TestRuntime {
   const directory = options?.directory ?? mkdtempSync(join(tmpdir(), 'mcp-home-test-'));
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const controlKey = 'test-bootstrap-control-key-00000000000000000001';
@@ -27,6 +32,8 @@ export function createTestRuntime(options?: { directory?: string; persist?: bool
     oauthUrlClientId: true,
     marketDir: '/tmp/mcp-home-test-market',
     callsRetentionDays: 30,
+    oauthRefreshIntervalSeconds: 3600,
+    ...options?.config,
   });
   return {
     runtime,
