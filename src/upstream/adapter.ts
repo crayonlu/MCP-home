@@ -197,6 +197,20 @@ export class UpstreamAdapter {
     if (slot.client.getProtocolEra() === 'modern' && isTaskExtensionMethod(request.method)) {
       return slot.extensions.request(request, options);
     }
+    if (request.method === 'tools/call' && slot.client.getProtocolEra() === 'modern') {
+      // SEP-2243: callTool mirrors declared parameters into Mcp-Param-* headers
+      // and auto-retries HeaderMismatch (-32020) after refreshing tools/list.
+      // The low-level request() path does neither, which breaks upstreams that
+      // require header-mirrored params (e.g. GitHub's get_file_contents).
+      const result = await slot.client.callTool(
+        request.params as { name: string; arguments?: Record<string, unknown> },
+        {
+          ...options,
+          allowInputRequired: true,
+        },
+      );
+      return restoreTaskResult(result);
+    }
     if (mrtrMethods.has(request.method)) {
       const result = await slot.client.request(request, inputRequiredResultSchema, {
         ...options,
